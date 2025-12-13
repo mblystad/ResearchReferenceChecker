@@ -99,19 +99,18 @@ def run_once(ttl_hours: int, max_calls: int) -> None:
         if cached:
             response = AvailabilityResponse.parse_raw(cached)
         else:
-            response = client.search_eurobonus(params)
+            response = client.bulk_availability(params)
             set_cache(conn, params, response.json(), ttl_hours=ttl_hours)
             limiter.increment()
 
         last_run = get_last_run(conn, alert_entry["saved_search_id"])
-        new_offers = []
+        new_itins = []
         if last_run:
-            new_offers = alerts.diff_against_last(last_run["response_json"], response)
-        if not last_run or new_offers:
+            new_itins = alerts.diff_against_last(last_run["response_json"], response)
+        if not last_run or new_itins:
             save_search_run(conn, alert_entry["saved_search_id"], response)
-        confirmed = alerts.confirmed_offers_only(new_offers)
-        if confirmed:
-            message = alerts.format_alert_message(alert_entry["name"], confirmed)
+        if new_itins:
+            message = alerts.format_alert_message(alert_entry["name"], new_itins)
             channels: List[str] = alert_entry["channels"] or []
             if "email" in channels:
                 notify_email(f"Award alert: {alert_entry['name']}", message)

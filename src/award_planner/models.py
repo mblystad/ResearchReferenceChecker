@@ -5,32 +5,24 @@ import json
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field, root_validator, validator
-
-
-class OfferStatus:
-    EUROBONUS_CONFIRMED = "EUROBONUS_CONFIRMED"
-    VERIFY_ON_SAS = "VERIFY_ON_SAS"
-    PARTNER_SIGNAL_ONLY = "PARTNER_SIGNAL_ONLY"
-    NOT_AVAILABLE = "NOT_AVAILABLE"
+from pydantic import BaseModel, Field, validator
 
 
 class SearchParams(BaseModel):
-    origin: str = Field(..., description="IATA origin code")
-    destination: Optional[str] = Field(None, description="IATA destination or region code")
+    origins: List[str] = Field(..., description="IATA origin codes")
+    destinations: Optional[List[str]] = Field(None, description="IATA destination codes")
     region: Optional[str] = Field(None, description="Region search target")
     start_date: date
     end_date: date
     cabin: str
-    passengers: int = Field(2, const=True)
-    nonstop_only: bool = False
-    sas_only: bool = False
-    fallback_enabled: bool = True
-    companion_mode: bool = True
+    passengers: int = Field(1, ge=1)
+    max_points: Optional[int]
+    program_source: str
+    companion_mode: bool = False
 
-    @validator("origin", "destination")
-    def uppercase_codes(cls, value: Optional[str]) -> Optional[str]:
-        return value.upper() if value else value
+    @validator("origins", "destinations", each_item=True)
+    def uppercase_codes(cls, value: str) -> str:
+        return value.upper()
 
     @validator("end_date")
     def ensure_range(cls, end_date: date, values: Dict[str, Any]) -> date:
@@ -42,40 +34,27 @@ class SearchParams(BaseModel):
     def normalized(self) -> str:
         return json.dumps(self.dict(), default=str, sort_keys=True)
 
-    @root_validator
-    def require_destination_or_region(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        if not values.get("destination") and not values.get("region"):
-            raise ValueError("Provide a destination or region")
-        return values
 
-
-class Offer(BaseModel):
+class Itinerary(BaseModel):
     origin: str
     destination: str
     departure_date: date
     cabin: str
-    source_program: str
-    status: str
-    seats_available: Optional[int] = None
+    seats: int
+    airline: Optional[str] = None
+    program: Optional[str] = None
     points_cost: Optional[int] = None
     taxes: Optional[float] = None
-    airline: Optional[str] = None
-    booking_url: Optional[str] = None
-    notes: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
 
     def key(self) -> str:
         cost_part = self.points_cost if self.points_cost is not None else "NA"
-        seats_part = self.seats_available if self.seats_available is not None else "NA"
-        return (
-            f"{self.origin}-{self.destination}-{self.departure_date}-{self.cabin}-"
-            f"{self.source_program}-{self.status}-{cost_part}-{seats_part}"
-        )
+        return f"{self.origin}-{self.destination}-{self.departure_date}-{self.cabin}-{cost_part}-{self.program or 'NA'}"
 
 
 class AvailabilityResponse(BaseModel):
     search_params: SearchParams
-    offers: List[Offer] = Field(default_factory=list)
+    itineraries: List[Itinerary] = Field(default_factory=list)
     fetched_at: datetime = Field(default_factory=datetime.utcnow)
 
     def as_dataframe_records(self) -> List[Dict[str, Any]]:
@@ -85,17 +64,17 @@ class AvailabilityResponse(BaseModel):
                 "destination": it.destination,
                 "departure_date": it.departure_date,
                 "cabin": it.cabin,
-                "status": it.status,
-                "seats_available": it.seats_available,
-                "source_program": it.source_program,
+                "seats": it.seats,
+                "airline": it.airline,
+                "program": it.program,
                 "points_cost": it.points_cost,
                 "taxes": it.taxes,
             }
-            for it in self.offers
+            for it in self.itineraries
         ]
 
     def digest(self) -> str:
-        payload = json.dumps([it.key() for it in self.offers], sort_keys=True)
+        payload = json.dumps([it.key() for it in self.itineraries], sort_keys=True)
         return hashlib.sha256(payload.encode()).hexdigest()
 
 

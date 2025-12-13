@@ -3,55 +3,44 @@ from __future__ import annotations
 import json
 from typing import Dict, Iterable, List, Sequence
 
-from .models import AvailabilityResponse, Offer, OfferStatus
+from .models import AvailabilityResponse, Itinerary
 
 
-def offer_index(offers: Sequence[Offer]) -> Dict[str, Offer]:
-    return {it.key(): it for it in offers}
+def itinerary_index(itineraries: Sequence[Itinerary]) -> Dict[str, Itinerary]:
+    return {it.key(): it for it in itineraries}
 
 
-def detect_new_offers(previous: Sequence[Offer], current: Sequence[Offer]) -> List[Offer]:
+def detect_new_itineraries(previous: Sequence[Itinerary], current: Sequence[Itinerary]) -> List[Itinerary]:
     previous_keys = set(it.key() for it in previous)
     return [it for it in current if it.key() not in previous_keys]
 
 
-def format_alert_message(title: str, new_offers: Sequence[Offer]) -> str:
-    header = f"New EuroBonus award space for {title}\n"
+def format_alert_message(title: str, new_itineraries: Sequence[Itinerary]) -> str:
+    header = f"New award space for {title}\n"
     lines = [
-        "- {date}: {orig} -> {dest} ({cabin}) via {prog} | status: {status} | seats: {seats}".format(
-            date=it.departure_date,
-            orig=it.origin,
-            dest=it.destination,
-            cabin=it.cabin,
-            prog=it.source_program,
-            status=it.status,
-            seats=it.seats_available or "unknown",
-        )
-        for it in new_offers
+        f"- {it.departure_date}: {it.origin} -> {it.destination} ({it.cabin}), {it.seats} seats"
+        f" via {it.program or 'unknown'} for {it.points_cost or 'N/A'}"
+        for it in new_itineraries
     ]
     return header + "\n".join(lines)
 
 
-def serialize_offer(offer: Offer) -> str:
-    return json.dumps(offer.dict(), default=str)
+def serialize_itinerary(itinerary: Itinerary) -> str:
+    return json.dumps(itinerary.dict(), default=str)
 
 
-def diff_against_last(previous_json: str, current_response: AvailabilityResponse) -> List[Offer]:
+def diff_against_last(previous_json: str, current_response: AvailabilityResponse) -> List[Itinerary]:
     try:
-        previous_data = json.loads(previous_json).get("offers", [])
+        previous_data = json.loads(previous_json).get("itineraries", [])
     except json.JSONDecodeError:
         previous_data = []
-    previous_offers = [Offer.parse_obj(item) for item in previous_data]
-    return detect_new_offers(previous_offers, current_response.offers)
+    previous_itineraries = [Itinerary.parse_obj(item) for item in previous_data]
+    return detect_new_itineraries(previous_itineraries, current_response.itineraries)
 
 
-def describe_sas_companion_workflow() -> str:
+def describe_ba_companion_workflow() -> str:
     return (
-        "Confirm EuroBonus award space for 2 passengers, then book manually on SAS. "
-        "In the SAS booking flow, choose 'Pay with points' and apply the Amex 2-for-1 "
-        "companion voucher at checkout; the discount shows in the price overview."
+        "Use the BA Reward Flight Finder to confirm companion-voucher inventory. "
+        "Copy the search parameters from this app and complete booking manually at "
+        "https://www.britishairways.com/travel/redeem-flight/public/en_gb."
     )
-
-
-def confirmed_offers_only(offers: Iterable[Offer]) -> List[Offer]:
-    return [offer for offer in offers if offer.status == OfferStatus.EUROBONUS_CONFIRMED]
