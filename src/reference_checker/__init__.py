@@ -4,6 +4,7 @@ from .app import ReferenceCheckerApp
 from .models import Citation, ReferenceEntry, ValidationIssue, DocumentExtraction
 from .link_checker import LinkVerifier
 from .web_metadata import WebPageMetadataProvider
+from .crossref import CrossrefMetadataProvider, OnlineReferenceVerifier
 
 __all__ = [
     "ReferenceCheckerApp",
@@ -13,4 +14,6 @@ __all__ = [
     "DocumentExtraction",
     "LinkVerifier",
     "WebPageMetadataProvider",
+    "CrossrefMetadataProvider",
+    "OnlineReferenceVerifier",
 ]

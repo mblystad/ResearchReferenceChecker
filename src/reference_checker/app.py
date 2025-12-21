@@ -12,6 +12,7 @@ from .formatter import ReferenceFormatter
 from .matcher import CitationMatcher
 from .link_checker import LinkVerifier
 from .metadata import MetadataProvider
+from .crossref import OnlineReferenceVerifier
 from .models import Citation, DocumentExtraction, ReferenceEntry, ValidationIssue
 from .parsers import DocumentParser
 from .reference_parser import ReferenceListParser
@@ -26,6 +27,7 @@ class ReferenceCheckerApp:
         self,
         metadata_provider: MetadataProvider | None = None,
         link_verifier: LinkVerifier | None = None,
+        online_verifier: OnlineReferenceVerifier | None = None,
     ):
         self.parser = DocumentParser()
         self.citation_extractor = CitationExtractor()
@@ -34,6 +36,7 @@ class ReferenceCheckerApp:
         self.formatter = ReferenceFormatter()
         self.metadata_provider = metadata_provider
         self.link_verifier = link_verifier
+        self.online_verifier = online_verifier
 
     @staticmethod
     def _issues_by_reference(
@@ -52,7 +55,7 @@ class ReferenceCheckerApp:
         return grouped
 
     def process_text(
-        self, text: str, check_links: bool = False
+        self, text: str, check_links: bool = False, verify_online: bool = False
     ) -> Tuple[DocumentExtraction, List[ValidationIssue]]:
         body, refs_text = self.parser.split_sections(text)
         citations = self.citation_extractor.extract(body)
@@ -62,11 +65,18 @@ class ReferenceCheckerApp:
         matches, match_issues = self.matcher.match(citations, references)
 
         validation_issues: List[ValidationIssue] = list(match_issues)
+        link_verifier = self.link_verifier if check_links else None
+        online_verifier = self.online_verifier if verify_online else None
         for ref in references:
             validation_issues.extend(validate_reference_completeness(ref))
             if check_links:
-                verifier = self.link_verifier or LinkVerifier()
-                validation_issues.extend(validate_reference_links(ref, verifier))
+                if link_verifier is None:
+                    link_verifier = LinkVerifier()
+                validation_issues.extend(validate_reference_links(ref, link_verifier))
+            if verify_online:
+                if online_verifier is None:
+                    online_verifier = OnlineReferenceVerifier()
+                validation_issues.extend(online_verifier.verify(ref))
 
         extraction = DocumentExtraction(
             body_text=body,
@@ -78,21 +88,25 @@ class ReferenceCheckerApp:
         return extraction, validation_issues
 
     def process_docx(
-        self, file_path: str | Path, check_links: bool = False
+        self, file_path: str | Path, check_links: bool = False, verify_online: bool = False
     ) -> Tuple[DocumentExtraction, List[ValidationIssue]]:
         """Convenience wrapper to parse and validate DOCX manuscripts."""
 
         text = self.parser.load_docx_text(file_path)
-        return self.process_text(text, check_links=check_links)
+        return self.process_text(text, check_links=check_links, verify_online=verify_online)
 
     def validation_report(self, text: str) -> str:
         _, issues = self.process_text(text)
         return render_report(issues)
 
-    def user_report_for_docx(self, file_path: str | Path, check_links: bool = False) -> str:
+    def user_report_for_docx(
+        self, file_path: str | Path, check_links: bool = False, verify_online: bool = False
+    ) -> str:
         """Generate a user-friendly report for a DOCX manuscript."""
 
-        extraction, issues = self.process_docx(file_path, check_links=check_links)
+        extraction, issues = self.process_docx(
+            file_path, check_links=check_links, verify_online=verify_online
+        )
         return render_report(issues, extraction=extraction)
 
     def format_references(self, references: List[ReferenceEntry]) -> List[str]:

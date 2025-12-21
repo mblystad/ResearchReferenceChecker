@@ -14,6 +14,8 @@ from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadF
 from fastapi.responses import FileResponse, HTMLResponse
 
 from .app import ReferenceCheckerApp
+from .crossref import CrossrefClient, CrossrefMetadataProvider, OnlineReferenceVerifier
+from .metadata import CompositeMetadataProvider
 from .report import render_report
 from .web_metadata import WebPageMetadataProvider
 
@@ -22,9 +24,32 @@ app = FastAPI(title="Reference Checker", description="Validate references from t
 generated_exports: Dict[str, Path] = {}
 
 
-def _build_checker(enable_web_enrichment: bool) -> ReferenceCheckerApp:
-    provider = WebPageMetadataProvider() if enable_web_enrichment else None
-    return ReferenceCheckerApp(metadata_provider=provider)
+def _build_checker(
+    enable_web_enrichment: bool,
+    enable_crossref: bool = False,
+    verify_online: bool = False,
+) -> ReferenceCheckerApp:
+    providers = []
+    crossref_client = CrossrefClient() if (enable_crossref or verify_online) else None
+
+    if enable_web_enrichment:
+        providers.append(WebPageMetadataProvider())
+    if enable_crossref:
+        providers.append(CrossrefMetadataProvider(client=crossref_client))
+
+    metadata_provider = None
+    if providers:
+        metadata_provider = (
+            providers[0] if len(providers) == 1 else CompositeMetadataProvider(providers)
+        )
+
+    online_verifier = (
+        OnlineReferenceVerifier(client=crossref_client) if verify_online else None
+    )
+
+    return ReferenceCheckerApp(
+        metadata_provider=metadata_provider, online_verifier=online_verifier
+    )
 
 
 def _layout(content: str) -> str:
@@ -55,10 +80,14 @@ def _form_page(
     report: str | None = None,
     download_token: str | None = None,
     web_enrichment: bool = False,
+    crossref_enrichment: bool = False,
+    online_verification: bool = False,
 ) -> str:
     """Render the landing page with optional report output and download link."""
 
     web_checkbox = "checked" if web_enrichment else ""
+    crossref_checkbox = "checked" if crossref_enrichment else ""
+    verify_checkbox = "checked" if online_verification else ""
 
     docx_form = f"""
     <form action=\"/analyze-docx\" method=\"post\" enctype=\"multipart/form-data\" class=\"bg-gray-50 border border-gray-200 rounded-lg p-4 mt-6\">
@@ -69,6 +98,14 @@ def _form_page(
         <div class=\"flex items-center gap-2 mt-3\">
             <input type=\"checkbox\" id=\"docx_web_enrich\" name=\"web_enrich\" value=\"1\" {web_checkbox} class=\"h-4 w-4 text-indigo-600 border-gray-300 rounded\" />
             <label for=\"docx_web_enrich\" class=\"text-sm text-gray-700\">Fill missing metadata by scraping linked pages/DOIs</label>
+        </div>
+        <div class=\"flex items-center gap-2 mt-3\">
+            <input type=\"checkbox\" id=\"docx_crossref_enrich\" name=\"crossref_enrich\" value=\"1\" {crossref_checkbox} class=\"h-4 w-4 text-indigo-600 border-gray-300 rounded\" />
+            <label for=\"docx_crossref_enrich\" class=\"text-sm text-gray-700\">Query Crossref to complete references</label>
+        </div>
+        <div class=\"flex items-center gap-2 mt-3\">
+            <input type=\"checkbox\" id=\"docx_verify_online\" name=\"verify_online\" value=\"1\" {verify_checkbox} class=\"h-4 w-4 text-indigo-600 border-gray-300 rounded\" />
+            <label for=\"docx_verify_online\" class=\"text-sm text-gray-700\">Check cited metadata against Crossref</label>
         </div>
         <button type=\"submit\" class=\"mt-4 inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md shadow hover:bg-indigo-700\">Validate DOCX</button>
     </form>
@@ -83,6 +120,14 @@ def _form_page(
         <div class=\"flex items-center gap-2 mt-3\">
             <input type=\"checkbox\" id=\"text_web_enrich\" name=\"web_enrich\" value=\"1\" {web_checkbox} class=\"h-4 w-4 text-indigo-600 border-gray-300 rounded\" />
             <label for=\"text_web_enrich\" class=\"text-sm text-gray-700\">Fill missing metadata by scraping linked pages/DOIs</label>
+        </div>
+        <div class=\"flex items-center gap-2 mt-3\">
+            <input type=\"checkbox\" id=\"text_crossref_enrich\" name=\"crossref_enrich\" value=\"1\" {crossref_checkbox} class=\"h-4 w-4 text-indigo-600 border-gray-300 rounded\" />
+            <label for=\"text_crossref_enrich\" class=\"text-sm text-gray-700\">Query Crossref to complete references</label>
+        </div>
+        <div class=\"flex items-center gap-2 mt-3\">
+            <input type=\"checkbox\" id=\"text_verify_online\" name=\"verify_online\" value=\"1\" {verify_checkbox} class=\"h-4 w-4 text-indigo-600 border-gray-300 rounded\" />
+            <label for=\"text_verify_online\" class=\"text-sm text-gray-700\">Check cited metadata against Crossref</label>
         </div>
         <button type=\"submit\" class=\"mt-4 inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-md shadow hover:bg-indigo-700\">Validate Text</button>
     </form>
@@ -117,18 +162,33 @@ async def home() -> HTMLResponse:
 
 
 @app.post("/analyze-text", response_class=HTMLResponse)
-async def analyze_text(text: str = Form(...), web_enrich: bool = Form(False)) -> HTMLResponse:
+async def analyze_text(
+    text: str = Form(...),
+    web_enrich: bool = Form(False),
+    crossref_enrich: bool = Form(False),
+    verify_online: bool = Form(False),
+) -> HTMLResponse:
     """Process pasted manuscript text and return a formatted report."""
 
-    checker = _build_checker(web_enrich)
-    extraction, issues = checker.process_text(text)
+    checker = _build_checker(web_enrich, crossref_enrich, verify_online)
+    extraction, issues = checker.process_text(text, verify_online=verify_online)
     report = render_report(issues, extraction=extraction)
-    return HTMLResponse(_form_page(report, web_enrichment=web_enrich))
+    return HTMLResponse(
+        _form_page(
+            report,
+            web_enrichment=web_enrich,
+            crossref_enrichment=crossref_enrich,
+            online_verification=verify_online,
+        )
+    )
 
 
 @app.post("/analyze-docx", response_class=HTMLResponse)
 async def analyze_docx(
-    file: UploadFile = File(...), web_enrich: bool = Form(False)
+    file: UploadFile = File(...),
+    web_enrich: bool = Form(False),
+    crossref_enrich: bool = Form(False),
+    verify_online: bool = Form(False),
 ) -> HTMLResponse:
     """Process an uploaded DOCX file and return a formatted report."""
 
@@ -139,10 +199,12 @@ async def analyze_docx(
         tmp.write(await file.read())
         tmp_path = Path(tmp.name)
 
-    checker = _build_checker(web_enrich)
+    checker = _build_checker(web_enrich, crossref_enrich, verify_online)
 
     try:
-        extraction, issues = checker.process_docx(tmp_path)
+        extraction, issues = checker.process_docx(
+            tmp_path, verify_online=verify_online
+        )
     finally:
         tmp_path.unlink(missing_ok=True)
 
@@ -154,7 +216,13 @@ async def analyze_docx(
 
     report = render_report(issues, extraction=extraction)
     return HTMLResponse(
-        _form_page(report, download_token=token, web_enrichment=web_enrich)
+        _form_page(
+            report,
+            download_token=token,
+            web_enrichment=web_enrich,
+            crossref_enrichment=crossref_enrich,
+            online_verification=verify_online,
+        )
     )
 
 

@@ -1,5 +1,6 @@
 from reference_checker.models import ReferenceEntry
 from reference_checker.web_metadata import WebPageMetadataProvider
+from reference_checker.models import ReferenceEntry
 
 
 HTML_FIXTURE = """

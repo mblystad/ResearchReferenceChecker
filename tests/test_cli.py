@@ -1,5 +1,7 @@
 from pathlib import Path
 
+from pathlib import Path
+
 from reference_checker import cli
 from reference_checker.models import DocumentExtraction
 
@@ -59,11 +61,13 @@ def test_cli_allows_stubbed_link_checks(monkeypatch, tmp_path: Path):
 
 def test_cli_enables_web_metadata_provider(monkeypatch, tmp_path: Path):
     created_provider = None
+    created_online_verifier = None
 
     class FakeApp:
-        def __init__(self, metadata_provider=None, link_verifier=None):
-            nonlocal created_provider
+        def __init__(self, metadata_provider=None, link_verifier=None, online_verifier=None):
+            nonlocal created_provider, created_online_verifier
             created_provider = metadata_provider
+            created_online_verifier = online_verifier
 
         def process_docx(self, *_args, **_kwargs):
             return DocumentExtraction("", "", [], [], {"matched": 0}), []
@@ -79,7 +83,8 @@ def test_cli_enables_web_metadata_provider(monkeypatch, tmp_path: Path):
     manuscript = tmp_path / "paper.docx"
     manuscript.write_bytes(b"")
 
-    exit_code = cli.main([str(manuscript), "--web-metadata"])
+    exit_code = cli.main([str(manuscript), "--web-metadata", "--verify-online"])
 
     assert exit_code == 0
     assert created_provider is not None, "Web metadata provider should be wired when flag is set"
+    assert created_online_verifier is not None, "Online verifier should be wired when flag is set"

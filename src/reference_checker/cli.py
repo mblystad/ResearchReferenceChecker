@@ -7,7 +7,9 @@ from pathlib import Path
 from typing import Any, Dict, List
 
 from .app import ReferenceCheckerApp
+from .crossref import CrossrefMetadataProvider, OnlineReferenceVerifier
 from .link_checker import LinkVerifier
+from .metadata import CompositeMetadataProvider
 from .models import Citation, DocumentExtraction, ReferenceEntry, ValidationIssue
 from .report import render_report
 from .web_metadata import WebPageMetadataProvider
@@ -87,19 +89,46 @@ def main(argv: List[str] | None = None) -> int:
         action="store_true",
         help="Attempt to scrape public web pages (URL/DOI targets) to complete missing reference fields",
     )
+    parser.add_argument(
+        "--crossref-metadata",
+        action="store_true",
+        help="Query Crossref to fill missing reference metadata before validation",
+    )
+    parser.add_argument(
+        "--verify-online",
+        action="store_true",
+        help="Compare references against Crossref to flag mismatched titles, authors, or years",
+    )
     args = parser.parse_args(argv)
 
-    metadata_provider = WebPageMetadataProvider() if args.web_metadata else None
+    providers = []
+    if args.web_metadata:
+        providers.append(WebPageMetadataProvider())
+    if args.crossref_metadata:
+        providers.append(CrossrefMetadataProvider())
+    if providers:
+        metadata_provider = (
+            providers[0] if len(providers) == 1 else CompositeMetadataProvider(providers)
+        )
+    else:
+        metadata_provider = None
+    online_verifier = OnlineReferenceVerifier() if args.verify_online else None
     checker = ReferenceCheckerApp(
-        metadata_provider=metadata_provider, link_verifier=LinkVerifier()
+        metadata_provider=metadata_provider,
+        link_verifier=LinkVerifier(),
+        online_verifier=online_verifier,
     )
     input_path = Path(args.input)
 
     if input_path.suffix.lower() == ".docx":
-        extraction, issues = checker.process_docx(input_path, check_links=args.check_links)
+        extraction, issues = checker.process_docx(
+            input_path, check_links=args.check_links, verify_online=args.verify_online
+        )
     else:
         text = input_path.read_text()
-        extraction, issues = checker.process_text(text, check_links=args.check_links)
+        extraction, issues = checker.process_text(
+            text, check_links=args.check_links, verify_online=args.verify_online
+        )
 
     report = render_report(issues, extraction=extraction)
     print(report)

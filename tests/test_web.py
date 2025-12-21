@@ -1,6 +1,9 @@
 import re
 
 import pytest
+import re
+
+import pytest
 
 fastapi = pytest.importorskip("fastapi")
 from fastapi.testclient import TestClient
@@ -19,6 +22,7 @@ def test_homepage_renders_forms():
     assert "tailwind" in response.text.lower()
     assert "name=\"file\"" in response.text
     assert "name=\"text\"" in response.text
+    assert "Crossref" in response.text
 
 
 def test_analyze_text_returns_report():
