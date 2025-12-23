@@ -17,7 +17,14 @@ from .models import Citation, DocumentExtraction, ReferenceEntry, ValidationIssu
 from .parsers import DocumentParser
 from .reference_parser import ReferenceListParser
 from .report import render_report
-from .validation import validate_reference_completeness, validate_reference_links
+from .predatory_db import PredatoryDbProvider
+from .reference_types import classify_reference
+from .validation import (
+    validate_broken_citation_markers,
+    validate_duplicate_references,
+    validate_reference_completeness,
+    validate_reference_links,
+)
 
 
 class ReferenceCheckerApp:
@@ -28,6 +35,9 @@ class ReferenceCheckerApp:
         metadata_provider: MetadataProvider | None = None,
         link_verifier: LinkVerifier | None = None,
         online_verifier: OnlineReferenceVerifier | None = None,
+        reference_style: str = "apa",
+        predatory_db: PredatoryDbProvider | None = None,
+        enable_predatory_db: bool = True,
     ):
         self.parser = DocumentParser()
         self.citation_extractor = CitationExtractor()
@@ -37,6 +47,11 @@ class ReferenceCheckerApp:
         self.metadata_provider = metadata_provider
         self.link_verifier = link_verifier
         self.online_verifier = online_verifier
+        self.reference_style = reference_style
+        if enable_predatory_db:
+            self.predatory_db = predatory_db or PredatoryDbProvider.load_default()
+        else:
+            self.predatory_db = None
 
     @staticmethod
     def _issues_by_reference(
@@ -62,13 +77,21 @@ class ReferenceCheckerApp:
         references = self.reference_parser.parse(refs_text)
         if self.metadata_provider:
             references = [self.metadata_provider.enrich(ref) for ref in references]
+        for ref in references:
+            ref.entry_type = classify_reference(ref)
         matches, match_issues = self.matcher.match(citations, references)
 
         validation_issues: List[ValidationIssue] = list(match_issues)
+        validation_issues.extend(validate_broken_citation_markers(body))
+        validation_issues.extend(validate_duplicate_references(references))
         link_verifier = self.link_verifier if check_links else None
         online_verifier = self.online_verifier if verify_online else None
         for ref in references:
-            validation_issues.extend(validate_reference_completeness(ref))
+            validation_issues.extend(
+                validate_reference_completeness(ref, style=self.reference_style)
+            )
+            if self.predatory_db:
+                validation_issues.extend(self.predatory_db.check_reference(ref))
             if check_links:
                 if link_verifier is None:
                     link_verifier = LinkVerifier()
@@ -95,6 +118,13 @@ class ReferenceCheckerApp:
         text = self.parser.load_docx_text(file_path)
         return self.process_text(text, check_links=check_links, verify_online=verify_online)
 
+    def process_file(
+        self, file_path: str | Path, check_links: bool = False, verify_online: bool = False
+    ) -> Tuple[DocumentExtraction, List[ValidationIssue]]:
+        """Parse supported manuscript files (DOCX, PDF, or text)."""
+        text = self.parser.load_text(file_path)
+        return self.process_text(text, check_links=check_links, verify_online=verify_online)
+
     def validation_report(self, text: str) -> str:
         _, issues = self.process_text(text)
         return render_report(issues)
@@ -110,7 +140,7 @@ class ReferenceCheckerApp:
         return render_report(issues, extraction=extraction)
 
     def format_references(self, references: List[ReferenceEntry]) -> List[str]:
-        return [self.formatter.format_apa(ref) for ref in references]
+        return [self.formatter.format(ref, self.reference_style) for ref in references]
 
     def build_updated_docx(
         self, extraction: DocumentExtraction, issues: List[ValidationIssue]
@@ -120,10 +150,11 @@ class ReferenceCheckerApp:
         paragraphs = [line for line in extraction.body_text.splitlines() if line]
         paragraphs.append("References")
 
-        issues_by_ref = self._issues_by_reference(issues, extraction.references)
+        missing_issues = [issue for issue in issues if _is_missing_detail(issue)]
+        issues_by_ref = self._issues_by_reference(missing_issues, extraction.references)
 
         for idx, ref in enumerate(extraction.references, start=1):
-            formatted = self.formatter.format_apa(ref)
+            formatted = self.formatter.format(ref, self.reference_style)
             paragraphs.append(f"{idx}. {formatted}")
 
             missing = issues_by_ref.get(idx - 1)
@@ -170,3 +201,8 @@ class ReferenceCheckerApp:
             archive.writestr("word/_rels/document.xml.rels", word_rels)
             archive.writestr("word/document.xml", document_xml)
         return buffer.getvalue()
+
+
+def _is_missing_detail(issue: ValidationIssue) -> bool:
+    code = issue.code.lower()
+    return code.startswith("missing-") or code.startswith("apa-") or "missing-" in code

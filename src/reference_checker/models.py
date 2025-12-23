@@ -23,6 +23,11 @@ class ReferenceEntry:
     authors: List[str] = field(default_factory=list)
     title: Optional[str] = None
     journal: Optional[str] = None
+    book_title: Optional[str] = None
+    conference_name: Optional[str] = None
+    publisher: Optional[str] = None
+    preprint_server: Optional[str] = None
+    dataset_name: Optional[str] = None
     year: Optional[str] = None
     volume: Optional[str] = None
     issue: Optional[str] = None

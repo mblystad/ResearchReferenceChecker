@@ -10,9 +10,10 @@ authors = [{name = "ResearchReferenceChecker"}]
 readme = "PROMPT.md"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.111.0",
-    "uvicorn>=0.30.0",
-    "python-multipart>=0.0.9",
+    "streamlit>=1.36.0",
+    "pandas>=2.2.0",
+    "pypdf>=4.2.0",
+    "openpyxl>=3.1.2",
 ]
 
 [project.scripts]

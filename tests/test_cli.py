@@ -15,6 +15,8 @@ def test_cli_writes_outputs(tmp_path: Path):
     json_out = tmp_path / "results.json"
     docx_out = tmp_path / "updated.docx"
     bib_out = tmp_path / "refs.bib"
+    ris_out = tmp_path / "refs.ris"
+    endnote_out = tmp_path / "refs.xml"
 
     exit_code = cli.main(
         [
@@ -25,6 +27,10 @@ def test_cli_writes_outputs(tmp_path: Path):
             str(docx_out),
             "--bibtex-output",
             str(bib_out),
+            "--ris-output",
+            str(ris_out),
+            "--endnote-output",
+            str(endnote_out),
         ]
     )
 
@@ -32,6 +38,8 @@ def test_cli_writes_outputs(tmp_path: Path):
     assert json_out.exists()
     assert docx_out.exists()
     assert bib_out.exists()
+    assert ris_out.exists()
+    assert endnote_out.exists()
 
 
 def test_cli_allows_stubbed_link_checks(monkeypatch, tmp_path: Path):
@@ -69,10 +77,7 @@ def test_cli_enables_web_metadata_provider(monkeypatch, tmp_path: Path):
             created_provider = metadata_provider
             created_online_verifier = online_verifier
 
-        def process_docx(self, *_args, **_kwargs):
-            return DocumentExtraction("", "", [], [], {"matched": 0}), []
-
-        def process_text(self, *_args, **_kwargs):
+        def process_file(self, *_args, **_kwargs):
             return DocumentExtraction("", "", [], [], {"matched": 0}), []
 
         def build_updated_docx(self, *_args, **_kwargs):  # pragma: no cover - unused here

@@ -1,179 +1,210 @@
-SYSTEM PROMPT — Reference Validation App (No Text Editing)
-
-You are an expert coding assistant contributing to this repository.
-Your task is to build and improve an application that performs reference integrity checking, metadata completion, and reference formatting, while enforcing strict rules:
-
-Core Rules
-
-Do NOT change, rewrite, modify, paraphrase, or improve the manuscript text.
-Your scope is references only.
-
-The app must:
-
-Identify and extract all in-text citations.
-
-Identify and extract all reference list entries.
-
-Match citations ↔ reference list.
-
-Flag missing or unpaired items.
-
-Fix, validate, and complete reference metadata.
-
-Fetch missing reference information using public databases (CrossRef, PubMed, DOI.org, Semantic Scholar, etc.).
-
-Reconstruct or update reference list entries without touching manuscript text.
-
-Any output related to writing quality is strictly forbidden.
-No grammar, no clarity suggestions, no phrasing changes.
-
-All corrections must be based on verified metadata—no hallucinated references.
-
-Required Functional Features
-
-The app must include functionality to:
-
-🔍 1. Detect reference issues
-
-In-text citations with no matching reference entry.
-
-Reference list entries not cited in the manuscript.
-
-Duplicated references.
-
-Broken citation markers.
-
-Incorrect formatting or missing required fields.
-
-🧾 2. Complete missing metadata
-
-Automatically retrieve and fill in:
-
-DOI
-
-Journal name
-
-Year, volume, issue
-
-Page numbers
-
-Publisher (books)
-
-URL validation/status
-
-Author name normalization
-
-🔗 3. Validate links and DOIs
-
-Confirm DOI resolution (HTTP 200).
-
-Check for dead or redirected URLs.
-
-Offer warnings, not rewrites.
-
-🧮 4. Normalize reference list
-
-Ensure uniform formatting in a target style:
-
-APA
-
-Vancouver
-
-IEEE
-
-Harvard
-
-Chicago
-
-No rewriting of manuscript text—only updating the reference list.
-
-🧠 5. Determine reference type
-
-Identify:
-
-Journal article
-
-Book / chapter
-
-Preprint
-
-Conference paper
-
-Website
-
-Dataset
-
-Apply correct formatting rules.
-
-📤 6. Export / Integration
-
-Export structured reference data as JSON.
-
-Export updated reference list as BibTeX, RIS, or EndNote XML.
-
-Produce a validation report summarizing all issues.
-
-Technical Requirements
-
-Your code must:
-
-Be modular and testable.
-
-Use clear function boundaries for:
-
-parsing text
-
-reference extraction
-
-metadata retrieval
-
-validation
-
-output formatting
-
-Include unit tests.
-
-Support file types such as PDF (text-extracted), DOCX, and plain text.
-
-Avoid modifying non-reference text.
-
-Output Requirements for Codex
-
-Whenever generating code or responding in this repository, follow these rules:
-
-Never rewrite any manuscript text.
-
-If asked to “fix references,” operate ONLY on citations + bibliography.
-
-If asked to “format references,” do not modify content outside the ref list.
-
-If asked to “search for missing metadata,” use APIs, not fabricated information.
-
-Code must be:
-
-clean
-
-documented
-
-safe
-
-minimal in external dependencies
-
-Example Behaviors
-Allowed:
-
-“Reference [12] missing DOI; retrieved from CrossRef.”
-
-“In-text citation Smith (2020) has no matching reference. Flagging.”
-
-“Normalized all references to APA 7 style.”
-
-Not Allowed:
-
-“Improved introduction text for clarity.” ❌
-
-“Suggested stronger phrasing in conclusion.” ❌
-
-“Added an interpretation of results.” ❌
-
-End of System Prompt
+Below is an updated `PROMPT.md` that adds **CSV-backed checks against the databases we built in this chat** (predatory journals/publishers + Norwegian level), while keeping your existing “never touch body text” constraint.
+
+````md
+# Reference Checker
+
+Reference Checker validates manuscript references **without altering body text**. It extracts in-text citations and reference list entries, matches them, flags issues, fills missing metadata from trusted sources, and formats a refreshed reference list. A Streamlit UI lets you paste a reference list, choose a style, and view a validation table with missing info plus predatory/Norwegian flags.
+
+It can also (optionally) **screen journals/publishers against local CSV databases** (e.g., predatory publisher/journal registries and Norwegian channel levels) and surface **warnings** in the report **without modifying the manuscript body text**.
+
+## Project scope (from `PROMPT.md`)
+- **Never modify manuscript body text.** Reference-only processing.
+- Detect citation/reference mismatches and missing metadata.
+- Fetch missing metadata from public databases (Crossref, DOI landing pages, etc.).
+- Produce validation reports and updated reference lists using verified metadata.
+- **Optional database-based screening:** check extracted journal/publisher strings against local CSV registries and attach warnings + manual-check links.
+
+## Current capabilities
+- **Inputs:** DOCX and plain text.
+- **Citation extraction:** numeric (`[1]`) and author–year (`(Doe, 2021)`) markers.
+- **Reference parsing:** authors, title, year, DOI, URL (heuristics).
+- **Validation checks:** missing references, uncited references, missing required fields, optional DOI/URL reachability checks.
+- **Metadata completion (optional):**
+  - **Web page metadata:** scrape DOI/URL landing pages for missing fields.
+  - **Crossref metadata:** fetch authoritative records without overwriting existing fields.
+  - **Online verification:** compare extracted title/author/year against Crossref and flag mismatches.
+- **CSV database screening (optional):**
+  - Load one or more CSV registries at startup.
+  - Extract **journal title** and **publisher name/URL domain** from each reference entry (best effort).
+  - Match against database records using normalized string matching + alias table (when provided).
+  - Apply publisher→journal inheritance rules when enabled (journal inherits warning from matched publisher).
+  - Attach **warning labels**, **Norwegian level (1/2/0/Unknown)** (if present in DB), and **manual-check links** in the report.
+- **Outputs:** validation report, updated DOCX (references only), JSON, BibTeX.
+- **Formatting:** APA-style reference rendering.
+
+## New: Predatory journal/publisher screening (CSV-backed)
+
+### Supported database files (from this chat)
+The reference checker can be configured to load the following CSVs:
+
+- `predatory_db_v6_manual_check_links.csv` (main registry)
+  - Contains `type` = `journal`/`publisher`, `name`, `url`, `risk`/flags, `norwegian_level`, and several `manual_check_*` link columns.
+- Optional helper tables (if you store them):
+  - `predatory_db_aliases_v2.csv` (alias table for matching)
+  - `predatory_db_v3_publisher_links.csv` (auditing/reporting of inferred publisher links)
+
+You can store these under a `data/` directory (recommended) and point the app/CLI at them.
+
+### Matching logic (high-level)
+Given an extracted candidate journal/publisher string:
+1. Normalize string (`lower`, strip punctuation, collapse whitespace, normalize unicode).
+2. Exact match against:
+   - `name_norm` / `abbr_norm` (if present), else `name`/`abbr` normalized on load.
+3. Alias match (if alias CSV provided).
+4. Optional fuzzy matching (not enabled by default; requires explicit flag and review threshold).
+
+For journal references, the checker can additionally match by URL domain:
+- If journal `url_domain` matches a publisher entry’s domain (exact/suffix/root), mark journal as linked to publisher and optionally inherit publisher warning status.
+
+### What gets reported
+For each reference entry, the validation report may include:
+- `predatory_db_hit`: true/false
+- `predatory_db_hit_type`: journal/publisher
+- `predatory_risk_level`: high/medium/low/unknown (as stored in DB)
+- `norwegian_level`: 2/1/0/Unknown (as stored in DB)
+- `manual_check_links`: a bundle of URLs (homepage, DOAJ, COPE, NLM, PubMed, Scimago, Kanalregisteret, Google searches)
+- `match_basis`: exact_name / alias / domain_match / fuzzy (if enabled)
+- `match_confidence`: 0–1 (if fuzzy enabled; else 1.0 for exact/alias)
+
+**Important:** These flags do not assert “predatory” as a legal conclusion. They are presented as **warning signals** with **links for manual verification**.
+
+## Not yet implemented (tracked vs. prompt expectations)
+- PDF text extraction support.
+- Additional reference styles (Vancouver/IEEE/Chicago/Harvard).
+- Reference-type classification with type-specific formatting rules.
+- RIS/EndNote XML export formats.
+- **Fuzzy matching review queue** for database screening (optional enhancement).
+- Automated “live” lookups against external whitelists/registries (DOAJ/COPE/NLM etc.) beyond link-outs.
+
+## Requirements
+- Python 3.11+
+- pip (or another installer) to install dependencies
+
+## Quickstart (local IDE: PyCharm / VS Code)
+Think “paint-by-numbers” simple. Follow these steps in order, copy/paste the commands, and you will have the app running.
+
+1. **Open a terminal in the project folder**  
+   PyCharm: right-click the project folder → **Open in Terminal**.  
+   VS Code: View → **Terminal** (it opens at the project root).
+
+2. **Make a sandbox just for this project (virtual environment)**
+   ```bash
+   python -m venv .venv
+````
+
+* Windows: run `.venv\Scripts\activate`
+* macOS/Linux: run `source .venv/bin/activate`
+  Keep this terminal open while you work so the sandbox stays active.
+
+3. **Install everything the app needs**
+
+   ```bash
+   pip install -e .
+   ```
+
+4. **Put the CSV databases in place (recommended)**
+   Create a `data/` folder at the project root and copy in:
+
+   * `data/predatory_db_v6_manual_check_links.csv`
+   * (optional) `data/predatory_db_aliases_v2.csv`
+
+5. **Start the web app (the friendly interface)**
+
+   ```bash
+   streamlit run app.py
+   ```
+
+   * Open your browser at [http://localhost:8000](http://localhost:8000).
+   * Click **Upload DOCX** or **Paste text**, then **Validate references**.
+
+   New toggles you may add to the UI:
+
+   * “Screen journals/publishers against local CSV database”
+   * “Enable publisher→journal inheritance”
+   * “Include manual-check links in report”
+
+6. **Close and reopen later**
+   Press `Ctrl+C` in the terminal to stop the server. To start again, repeat step 5.
+
+7. **Run the automated checks (optional but nice)**
+
+   ```bash
+   pytest -q
+   ```
+
+## CLI: database screening flags (proposed)
+
+In addition to existing flags, add:
+
+* `--pred-db data/predatory_db_v6_manual_check_links.csv`
+* `--pred-alias-db data/predatory_db_aliases_v2.csv` (optional)
+* `--pred-check` (enable screening)
+* `--pred-inheritance` (enable publisher→journal inheritance)
+* `--pred-fuzzy` (optional; off by default)
+* `--pred-report-links` (include manual-check link bundle)
+
+Example:
+
+```bash
+reference-checker sample_manuscript.docx \
+  --json-output results.json \
+  --updated-docx updated.docx \
+  --pred-check \
+  --pred-db data/predatory_db_v6_manual_check_links.csv \
+  --pred-alias-db data/predatory_db_aliases_v2.csv \
+  --pred-inheritance \
+  --pred-report-links
+```
+
+## Programmatic usage
+
+```python
+from reference_checker.app import ReferenceCheckerApp
+from reference_checker.link_checker import LinkVerifier
+from reference_checker.web_metadata import WebPageMetadataProvider
+from reference_checker.predatory_db import PredatoryDbProvider  # new
+
+pred_db = PredatoryDbProvider.from_csv(
+    db_path="data/predatory_db_v6_manual_check_links.csv",
+    alias_path="data/predatory_db_aliases_v2.csv",
+    enable_inheritance=True,
+)
+
+checker = ReferenceCheckerApp(
+    link_verifier=LinkVerifier(),
+    metadata_provider=WebPageMetadataProvider(),
+    predatory_db=pred_db,  # new
+)
+
+extraction, issues = checker.process_docx(
+    "sample_manuscript.docx",
+    check_links=True,
+    pred_check=True,  # new
+)
+report = checker.validation_report(
+    extraction.body_text + "\nReferences\n" + extraction.references_text
+)
+updated_docx_bytes = checker.build_updated_docx(extraction, issues)
+```
+
+## Sample data
+
+To avoid storing binaries in the repository, use the snippet above (or the `sample_docx_path` pytest fixture) to generate the one-page dummy manuscript on demand. The text includes numbered citations [1], [2], an author citation (Doe, 2021), and a four-entry reference list with one intentionally uncited entry for negative checks.
+
+## Repository map (key modules)
+
+* `src/reference_checker/app.py`: Orchestrates extraction, validation, enrichment, reporting.
+* `src/reference_checker/reference_parser.py`: Reference list parsing heuristics.
+* `src/reference_checker/citation_extractor.py`: In-text citation detection.
+* `src/reference_checker/validation.py`: Issue detection rules.
+* `src/reference_checker/web_metadata.py`: DOI/URL landing-page scraping.
+* `src/reference_checker/crossref.py`: Crossref metadata and verification.
+* `app.py`: Streamlit UI for reference-list validation.
+* `src/reference_checker/predatory_db.py`: **NEW** CSV loader + matching + inheritance + manual-check link bundling.
+* `src/reference_checker/normalization.py`: **NEW/EXTENDED** shared normalization helpers for references + DB matching.
+
+```
+
+If you want, paste your current `PROMPT.md` file contents (or upload it) and I’ll apply this as a clean diff against your actual file so you can drop it directly into the repo with minimal merge pain.
+::contentReference[oaicite:0]{index=0}
+```

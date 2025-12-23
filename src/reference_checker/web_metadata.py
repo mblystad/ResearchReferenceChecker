@@ -119,6 +119,12 @@ class WebPageMetadataProvider(MetadataProvider):
         journal = meta("citation_journal_title") or meta("citation_conference_title")
         if journal:
             metadata["journal"] = journal
+        conference = meta("citation_conference_title")
+        if conference:
+            metadata["conference_name"] = conference
+        book_title = meta("citation_book_title")
+        if book_title:
+            metadata["book_title"] = book_title
 
         doi = meta("citation_doi")
         if doi:
@@ -149,6 +155,10 @@ class WebPageMetadataProvider(MetadataProvider):
         elif first_page:
             metadata["pages"] = first_page
 
+        publisher = meta("citation_publisher") or meta("dc.publisher")
+        if publisher:
+            metadata["publisher"] = publisher
+
         return metadata
 
     @staticmethod
@@ -158,7 +168,18 @@ class WebPageMetadataProvider(MetadataProvider):
 
         if metadata.get("authors") and not entry.authors:
             entry.authors = list(metadata["authors"])
-        for field in ["title", "journal", "year", "volume", "issue", "pages", "doi"]:
+        for field in [
+            "title",
+            "journal",
+            "book_title",
+            "conference_name",
+            "year",
+            "volume",
+            "issue",
+            "pages",
+            "doi",
+            "publisher",
+        ]:
             value = metadata.get(field)
             if value and getattr(entry, field) in (None, ""):
                 setattr(entry, field, value)  # type: ignore[arg-type]

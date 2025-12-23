@@ -107,6 +107,13 @@ class CrossrefClient:
         title = first_value(message.get("title"))
         doi = message.get("DOI")
         pages = message.get("page")
+        publisher = message.get("publisher")
+        url = message.get("URL")
+        entry_type = message.get("type")
+        book_title = None
+        if entry_type == "book-chapter":
+            book_title = journal
+            journal = None
 
         return {
             "authors": authors,
@@ -117,7 +124,10 @@ class CrossrefClient:
             "issue": message.get("issue"),
             "pages": pages,
             "doi": doi,
-            "entry_type": message.get("type"),
+            "entry_type": entry_type,
+            "publisher": publisher,
+            "url": url,
+            "book_title": book_title,
         }
 
 
@@ -140,12 +150,15 @@ class CrossrefMetadataProvider(MetadataProvider):
         for field in [
             "title",
             "journal",
+            "book_title",
             "year",
             "volume",
             "issue",
             "pages",
             "doi",
             "entry_type",
+            "publisher",
+            "url",
         ]:
             value = metadata.get(field)
             if value and getattr(entry, field) in (None, ""):

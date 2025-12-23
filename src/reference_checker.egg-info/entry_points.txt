@@ -1,0 +1,2 @@
+[console_scripts]
+reference-checker = reference_checker.cli:main

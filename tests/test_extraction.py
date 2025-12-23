@@ -12,11 +12,13 @@ def test_document_parser_splits_references():
 
 
 def test_citation_extractor_detects_numeric_and_author_year():
-    text = "As shown in [1] and (Smith 2020), references matter."
+    text = "As shown in [1, 2-3] and (Smith 2020), references matter."
     extractor = CitationExtractor()
     citations = extractor.extract(text)
     keys = extractor.extract_keys(citations)
     assert "1" in keys
+    assert "2" in keys
+    assert "3" in keys
     assert "smith2020" in keys
 
 

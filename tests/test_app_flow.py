@@ -1,5 +1,4 @@
 from reference_checker.app import ReferenceCheckerApp
-from reference_checker.app import ReferenceCheckerApp
 from reference_checker.metadata import StaticMetadataProvider
 from reference_checker.models import ReferenceEntry
 

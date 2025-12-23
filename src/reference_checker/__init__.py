@@ -5,6 +5,7 @@ from .models import Citation, ReferenceEntry, ValidationIssue, DocumentExtractio
 from .link_checker import LinkVerifier
 from .web_metadata import WebPageMetadataProvider
 from .crossref import CrossrefMetadataProvider, OnlineReferenceVerifier
+from .predatory_db import PredatoryDbProvider
 
 __all__ = [
     "ReferenceCheckerApp",
@@ -16,4 +17,5 @@ __all__ = [
     "WebPageMetadataProvider",
     "CrossrefMetadataProvider",
     "OnlineReferenceVerifier",
+    "PredatoryDbProvider",
 ]

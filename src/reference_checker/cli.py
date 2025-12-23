@@ -11,8 +11,10 @@ from .crossref import CrossrefMetadataProvider, OnlineReferenceVerifier
 from .link_checker import LinkVerifier
 from .metadata import CompositeMetadataProvider
 from .models import Citation, DocumentExtraction, ReferenceEntry, ValidationIssue
+from .exporters import to_bibtex, to_endnote_xml, to_ris
 from .report import render_report
 from .web_metadata import WebPageMetadataProvider
+from .predatory_db import PredatoryDbProvider
 
 
 def _serialize_citation(citation: Citation) -> Dict[str, Any]:
@@ -30,6 +32,11 @@ def _serialize_reference(reference: ReferenceEntry) -> Dict[str, Any]:
         "authors": reference.authors,
         "title": reference.title,
         "journal": reference.journal,
+        "book_title": reference.book_title,
+        "conference_name": reference.conference_name,
+        "publisher": reference.publisher,
+        "preprint_server": reference.preprint_server,
+        "dataset_name": reference.dataset_name,
         "year": reference.year,
         "volume": reference.volume,
         "issue": reference.issue,
@@ -63,7 +70,7 @@ def _build_result(extraction: DocumentExtraction, issues: List[ValidationIssue])
 
 def main(argv: List[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate manuscript references")
-    parser.add_argument("input", help="Path to DOCX or text file to validate")
+    parser.add_argument("input", help="Path to DOCX, PDF, or text file to validate")
     parser.add_argument(
         "--json-output",
         type=Path,
@@ -78,6 +85,22 @@ def main(argv: List[str] | None = None) -> int:
         "--bibtex-output",
         type=Path,
         help="Write formatted references as BibTeX",
+    )
+    parser.add_argument(
+        "--ris-output",
+        type=Path,
+        help="Write formatted references as RIS",
+    )
+    parser.add_argument(
+        "--endnote-output",
+        type=Path,
+        help="Write formatted references as EndNote XML",
+    )
+    parser.add_argument(
+        "--style",
+        default="apa",
+        choices=["apa", "vancouver", "ieee", "harvard", "chicago"],
+        help="Reference style to use when formatting outputs",
     )
     parser.add_argument(
         "--check-links",
@@ -99,6 +122,17 @@ def main(argv: List[str] | None = None) -> int:
         action="store_true",
         help="Compare references against Crossref to flag mismatched titles, authors, or years",
     )
+    parser.add_argument(
+        "--predatory-db",
+        action="append",
+        type=Path,
+        help="Path to predatory journal/publisher CSV registry (can be repeated)",
+    )
+    parser.add_argument(
+        "--no-predatory-db",
+        action="store_true",
+        help="Disable predatory journal screening",
+    )
     args = parser.parse_args(argv)
 
     providers = []
@@ -113,22 +147,23 @@ def main(argv: List[str] | None = None) -> int:
     else:
         metadata_provider = None
     online_verifier = OnlineReferenceVerifier() if args.verify_online else None
+    predatory_provider = None
+    enable_predatory_db = not args.no_predatory_db
+    if args.predatory_db and enable_predatory_db:
+        predatory_provider = PredatoryDbProvider.from_csv_paths(args.predatory_db)
     checker = ReferenceCheckerApp(
         metadata_provider=metadata_provider,
         link_verifier=LinkVerifier(),
         online_verifier=online_verifier,
+        reference_style=args.style,
+        predatory_db=predatory_provider,
+        enable_predatory_db=enable_predatory_db,
     )
     input_path = Path(args.input)
 
-    if input_path.suffix.lower() == ".docx":
-        extraction, issues = checker.process_docx(
-            input_path, check_links=args.check_links, verify_online=args.verify_online
-        )
-    else:
-        text = input_path.read_text()
-        extraction, issues = checker.process_text(
-            text, check_links=args.check_links, verify_online=args.verify_online
-        )
+    extraction, issues = checker.process_file(
+        input_path, check_links=args.check_links, verify_online=args.verify_online
+    )
 
     report = render_report(issues, extraction=extraction)
     print(report)
@@ -142,8 +177,13 @@ def main(argv: List[str] | None = None) -> int:
         args.updated_docx.write_bytes(updated_bytes)
 
     if args.bibtex_output:
-        formatted = checker.format_references(extraction.references)
-        args.bibtex_output.write_text("\n\n".join(formatted))
+        args.bibtex_output.write_text(to_bibtex(extraction.references))
+
+    if args.ris_output:
+        args.ris_output.write_text(to_ris(extraction.references))
+
+    if args.endnote_output:
+        args.endnote_output.write_text(to_endnote_xml(extraction.references))
 
     return 0
 
