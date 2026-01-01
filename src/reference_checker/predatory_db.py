@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
 import csv
+from difflib import SequenceMatcher
 
 from .models import ReferenceEntry, ValidationIssue
 from .normalization import extract_domain, iter_domain_candidates, normalize_text
@@ -29,6 +30,7 @@ class PredatoryDbMatch:
     record: PredatoryDbRecord
     basis: str
     matched_value: str
+    score: float | None = None
 
 
 _DEFAULT_PROVIDER: "PredatoryDbProvider | None" = None
@@ -97,22 +99,40 @@ class PredatoryDbProvider:
             )
         return issues
 
-    def match_reference(self, reference: ReferenceEntry) -> List[PredatoryDbMatch]:
+    def match_reference(
+        self,
+        reference: ReferenceEntry,
+        *,
+        fuzzy: bool = False,
+        fuzzy_threshold: float = 0.88,
+        max_fuzzy_matches: int = 3,
+    ) -> List[PredatoryDbMatch]:
         matches: List[PredatoryDbMatch] = []
+        name_candidates: list[tuple[str, set[str]]] = []
         if reference.journal:
-            matches.extend(
-                self._match_name(reference.journal, expected_types={"journal", "publisher"})
-            )
+            name_candidates.append((reference.journal, {"journal", "publisher"}))
         if reference.publisher:
-            matches.extend(
-                self._match_name(reference.publisher, expected_types={"publisher"})
-            )
+            name_candidates.append((reference.publisher, {"publisher"}))
+        if fuzzy and not name_candidates and reference.raw_text:
+            name_candidates.append((reference.raw_text, {"journal", "publisher"}))
+
+        for name, expected_types in name_candidates:
+            matches.extend(self._match_name(name, expected_types=expected_types))
+            if fuzzy:
+                matches.extend(
+                    self._match_name_fuzzy(
+                        name,
+                        expected_types=expected_types,
+                        threshold=fuzzy_threshold,
+                        max_matches=max_fuzzy_matches,
+                    )
+                )
         url_domain = extract_domain(reference.url)
         if url_domain:
             matches.extend(
                 self._match_domain(url_domain, expected_types={"journal", "publisher"})
             )
-        return matches
+        return _dedupe_matches(matches)
 
     def _match_name(
         self, name: str, expected_types: set[str]
@@ -129,8 +149,50 @@ class PredatoryDbProvider:
                         record=record,
                         basis="name",
                         matched_value=name,
+                        score=1.0,
                     )
                 )
+        return matches
+
+    def _match_name_fuzzy(
+        self,
+        name: str,
+        expected_types: set[str],
+        *,
+        threshold: float,
+        max_matches: int,
+    ) -> List[PredatoryDbMatch]:
+        normalized = normalize_text(name)
+        if not normalized:
+            return []
+        scored: list[tuple[float, PredatoryDbRecord]] = []
+        for candidate_norm, records in self._name_index.items():
+            score = SequenceMatcher(None, normalized, candidate_norm).ratio()
+            if score < threshold:
+                continue
+            for record in records:
+                if record.entry_type in expected_types:
+                    scored.append((score, record))
+        if not scored:
+            return []
+        scored.sort(key=lambda item: item[0], reverse=True)
+        matches: List[PredatoryDbMatch] = []
+        seen: set[str] = set()
+        for score, record in scored:
+            record_key = record.entry_id or _record_fallback_key(record)
+            if record_key in seen:
+                continue
+            seen.add(record_key)
+            matches.append(
+                PredatoryDbMatch(
+                    record=record,
+                    basis="fuzzy-name",
+                    matched_value=name,
+                    score=score,
+                )
+            )
+            if len(matches) >= max_matches:
+                break
         return matches
 
     def _match_domain(
@@ -146,6 +208,7 @@ class PredatoryDbProvider:
                             record=record,
                             basis="domain",
                             matched_value=domain,
+                            score=1.0,
                         )
                     )
         return matches
@@ -205,6 +268,8 @@ def _build_match_message(match: PredatoryDbMatch) -> str:
         f"Norwegian level={norwegian}",
         f"match={match.basis}",
     ]
+    if match.score is not None and match.basis.startswith("fuzzy"):
+        parts.append(f"similarity={match.score:.2f}")
     if summary:
         parts.append(summary)
     link_summary = _format_links(record.manual_links)
@@ -296,3 +361,16 @@ def _clean_value(value: Optional[str]) -> Optional[str]:
 
 
 __all__ = ["PredatoryDbProvider", "PredatoryDbRecord", "PredatoryDbMatch"]
+
+
+def _dedupe_matches(matches: List[PredatoryDbMatch]) -> List[PredatoryDbMatch]:
+    best: Dict[str, PredatoryDbMatch] = {}
+    for match in matches:
+        record_key = match.record.entry_id or _record_fallback_key(match.record)
+        key = f"{record_key}:{match.basis}"
+        current = best.get(key)
+        current_score = current.score if current and current.score is not None else 0.0
+        match_score = match.score if match.score is not None else 0.0
+        if current is None or match_score > current_score:
+            best[key] = match
+    return list(best.values())
