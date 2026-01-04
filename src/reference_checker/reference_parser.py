@@ -17,6 +17,10 @@ class ReferenceListParser:
     VOLUME_ISSUE_PATTERN = re.compile(r"(\d+)\s*\((\d+)\)")
     CONFERENCE_PATTERN = re.compile(r"(proceedings of|conference on|conference|symposium|workshop)(.+)", re.IGNORECASE)
     PREPRINT_PATTERN = re.compile(r"\b(arxiv|biorxiv|medrxiv|ssrn|research square)\b", re.IGNORECASE)
+    APA_TITLE_JOURNAL_PATTERN = re.compile(
+        r"\(\s*(?P<year>(19|20)\d{2})\s*\)\.\s*(?P<title>.+?)\.\s*(?P<journal>[^,]+)",
+        re.IGNORECASE,
+    )
 
     def parse(self, text: str) -> List[ReferenceEntry]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -65,12 +69,18 @@ class ReferenceListParser:
         return match.group(0) if match else None
 
     def _extract_title(self, content: str) -> str | None:
+        match = self.APA_TITLE_JOURNAL_PATTERN.search(content)
+        if match:
+            return match.group("title").strip()
         segments = [seg.strip() for seg in content.split(".") if seg.strip()]
         if len(segments) > 1:
             return segments[1]
         return None
 
     def _extract_journal(self, content: str) -> str | None:
+        match = self.APA_TITLE_JOURNAL_PATTERN.search(content)
+        if match:
+            return match.group("journal").strip()
         segments = [seg.strip() for seg in content.split(".") if seg.strip()]
         if len(segments) < 3:
             return None

@@ -106,6 +106,7 @@ class PredatoryDbProvider:
         fuzzy: bool = False,
         fuzzy_threshold: float = 0.88,
         max_fuzzy_matches: int = 3,
+        fuzzy_token_threshold: float = 0.8,
     ) -> List[PredatoryDbMatch]:
         matches: List[PredatoryDbMatch] = []
         name_candidates: list[tuple[str, set[str]]] = []
@@ -125,6 +126,7 @@ class PredatoryDbProvider:
                         expected_types=expected_types,
                         threshold=fuzzy_threshold,
                         max_matches=max_fuzzy_matches,
+                        token_threshold=fuzzy_token_threshold,
                     )
                 )
         url_domain = extract_domain(reference.url)
@@ -161,12 +163,20 @@ class PredatoryDbProvider:
         *,
         threshold: float,
         max_matches: int,
+        token_threshold: float,
     ) -> List[PredatoryDbMatch]:
         normalized = normalize_text(name)
         if not normalized:
             return []
+        token_set = set(normalized.split())
+        if not token_set:
+            return []
         scored: list[tuple[float, PredatoryDbRecord]] = []
         for candidate_norm, records in self._name_index.items():
+            candidate_tokens = set(candidate_norm.split())
+            token_ratio = _token_overlap_ratio(token_set, candidate_tokens)
+            if token_ratio < token_threshold:
+                continue
             score = SequenceMatcher(None, normalized, candidate_norm).ratio()
             if score < threshold:
                 continue
@@ -374,3 +384,10 @@ def _dedupe_matches(matches: List[PredatoryDbMatch]) -> List[PredatoryDbMatch]:
         if current is None or match_score > current_score:
             best[key] = match
     return list(best.values())
+
+
+def _token_overlap_ratio(tokens: set[str], candidate_tokens: set[str]) -> float:
+    if not tokens or not candidate_tokens:
+        return 0.0
+    overlap = len(tokens & candidate_tokens)
+    return overlap / max(len(tokens), len(candidate_tokens))
