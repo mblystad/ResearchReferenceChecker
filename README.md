@@ -144,13 +144,8 @@ This is the quickest way to try the predatory registry matcher.
 ## Predatory registry matching
 
 ### Where the CSV is loaded from
-The predatory matcher automatically searches for these files (first match wins):
-- `predatory_db_v7_with_norwegian_levels.csv`
-- `predatory_db_v6_manual_check_links.csv`
-- `predatory_db_v5_norwegian_levels.csv`
-- `predatory_db_v5_norwegian_matches.csv`
-
-It checks both the project root and a `data/` folder.
+The predatory matcher automatically searches for `predatory_db_v7_with_norwegian_levels.csv`
+in the project root or in a `data/` folder.
 
 ### Minimum useful CSV columns
 The matcher works best with these columns (extra columns are ignored):
@@ -185,20 +180,6 @@ reference-checker your_manuscript.docx \
   --predatory-db data/predatory_db_v7_with_norwegian_levels.csv \
   --json-output results.json
 ```
-
----
-
-## Merging Norwegian levels into the registry CSV
-
-If you have:
-- `predatory_db_v6_manual_check_links.csv`
-- `2025-12-23 Scientific Journals and Series.csv`
-
-You can generate a merged file with Norwegian levels:
-```bash
-python scripts/merge_norwegian_levels.py
-```
-This writes `predatory_db_v7_with_norwegian_levels.csv` in the project root.
 
 ---
 
@@ -249,7 +230,7 @@ extraction, issues = checker.process_file(
 - `src/reference_checker/web_metadata.py`: DOI/URL metadata scraping
 - `src/reference_checker/crossref.py`: Crossref metadata + verification
 - `src/reference_checker/predatory_db.py`: Predatory registry matching
-- `scripts/merge_norwegian_levels.py`: Registry merge helper
+- `predatory_db_v7_with_norwegian_levels.csv`: Predatory registry with Norwegian levels
 
 ---
 
@@ -276,7 +257,3 @@ pytest -q
 ```
 
 ---
-
-## Notes about other scripts
-
-This repo includes a `scripts/poller.py` and an `src/award_planner` package used for unrelated Seats.aero polling. They are not required for the reference checker. If you want to use them, install extra dependencies from `requirements.txt` and configure `.env.example`.

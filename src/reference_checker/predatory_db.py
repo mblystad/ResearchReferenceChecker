@@ -317,46 +317,21 @@ def _format_links(links: Dict[str, str]) -> str | None:
 
 
 def _default_csv_paths(base_dir: Path | None = None) -> List[Path]:
-    candidates: List[Path] = []
-    roots = []
+    roots: List[Path] = []
     if base_dir:
         roots.append(base_dir)
     roots.extend([Path.cwd(), Path(__file__).resolve().parents[2]])
 
-    preferred = [
-        "predatory_db_v7_with_norwegian_levels.csv",
-        "predatory_db_v6_manual_check_links.csv",
-        "predatory_db_v5_norwegian_levels.csv",
-        "predatory_db_v5_norwegian_matches.csv",
-    ]
-
-    found_v6 = False
+    filename = "predatory_db_v7_with_norwegian_levels.csv"
+    candidates: List[Path] = []
     for root in roots:
-        for name in preferred:
-            path = root / name
-            if path.exists():
-                if name == "predatory_db_v7_with_norwegian_levels.csv":
-                    candidates = [path]
-                    found_v6 = True
-                    break
-                if not found_v6:
-                    candidates.append(path)
-        if found_v6:
-            break
-        data_root = root / "data"
-        if data_root.exists() and not found_v6:
-            for name in preferred:
-                path = data_root / name
-                if path.exists():
-                    if name == "predatory_db_v7_with_norwegian_levels.csv":
-                        candidates = [path]
-                        found_v6 = True
-                        break
-                    candidates.append(path)
-        if found_v6:
-            break
+        direct = root / filename
+        if direct.exists():
+            candidates.append(direct)
+        data_path = root / "data" / filename
+        if data_path.exists():
+            candidates.append(data_path)
 
-    # Deduplicate while preserving order.
     unique: List[Path] = []
     seen = set()
     for path in candidates:
