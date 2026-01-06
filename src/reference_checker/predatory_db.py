@@ -21,6 +21,8 @@ class PredatoryDbRecord:
     risk_level: Optional[str]
     norwegian_level: Optional[str]
     warning_summary: Optional[str]
+    source: Optional[str]
+    source_url: Optional[str]
     manual_links: Dict[str, str]
     entry_id: Optional[str]
 
@@ -239,6 +241,8 @@ def _record_from_row(row: Dict[str, str]) -> PredatoryDbRecord:
         risk_level=_clean_value(row.get("risk_level") or row.get("risk")),
         norwegian_level=_clean_value(row.get("norwegian_level")),
         warning_summary=_clean_value(row.get("warning_summary")),
+        source=_clean_value(row.get("source")),
+        source_url=_clean_value(row.get("source_url")),
         manual_links=manual_links,
         entry_id=_clean_value(row.get("entry_id")),
     )

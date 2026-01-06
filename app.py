@@ -7,6 +7,7 @@ from urllib.parse import quote_plus
 
 import pandas as pd
 import streamlit as st
+import re
 
 ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
@@ -28,6 +29,8 @@ BASIS_PRIORITY = {
     "domain": 2,
     "fuzzy-name": 1,
 }
+
+DOI_REGEX = re.compile(r"10\.\d{4,9}/\S+", re.IGNORECASE)
 
 SAMPLE_TEXT = """Doe J. Sample article title. Journal of Testing. 2021;10(2):123-130. doi:10.1234/jt.2021.456.
 Smith A, Lee B. Another study on testing. Proceedings of the Reference Checking Conference; 2020. Available from: https://example.com/testing.
@@ -208,6 +211,72 @@ def _extract_reference_text_from_upload(uploaded) -> str | None:
     return raw_bytes.decode("utf-8", errors="ignore")
 
 
+def _has_authors(raw_text: str, parsed_authors: list[str]) -> bool:
+    if parsed_authors:
+        return True
+    if not raw_text:
+        return False
+    first_segment = raw_text.split(".", 1)[0]
+    if "et al" in first_segment.lower():
+        return True
+    if "," in first_segment:
+        return True
+    if re.search(r"\b[A-Z][a-zA-Z'-]+\s+[A-Z][a-zA-Z'-]+\b", first_segment):
+        return True
+    return False
+
+
+def _has_title(raw_text: str, parsed_title: str | None) -> bool:
+    if parsed_title:
+        return True
+    if not raw_text:
+        return False
+    if re.search(r"\(\s*(19|20)\d{2}\s*\)\.\s*[^.]{3,}\.", raw_text):
+        return True
+    segments = [seg.strip() for seg in raw_text.split(".") if seg.strip()]
+    if len(segments) >= 2:
+        candidate = segments[1]
+        if not candidate.lower().startswith("available from"):
+            return True
+    return False
+
+
+def _has_journal(raw_text: str, parsed_journal: str | None) -> bool:
+    if parsed_journal:
+        return True
+    if not raw_text:
+        return False
+    match = re.search(r"\.\s*([^\.]+)\.\s*(19|20)\d{2}", raw_text)
+    if match:
+        candidate = match.group(1).strip()
+        if candidate and not candidate.lower().startswith("available from"):
+            return True
+    return False
+
+
+def _has_doi(raw_text: str, parsed_doi: str | None) -> bool:
+    if parsed_doi:
+        return True
+    if not raw_text:
+        return False
+    return DOI_REGEX.search(raw_text) is not None
+
+
+def _missing_field_summary(raw_text: str, ref) -> str:
+    missing = []
+    if not _has_authors(raw_text, ref.authors):
+        missing.append("authors")
+    if not _has_title(raw_text, ref.title):
+        missing.append("title")
+    if not _has_journal(raw_text, ref.journal):
+        missing.append("journal")
+    if not _has_doi(raw_text, ref.doi):
+        missing.append("doi")
+    if not missing:
+        return "OK"
+    return "Missing: " + ", ".join(missing)
+
+
 def _build_rows(
     reference_text: str, *, fuzzy_threshold: float, max_fuzzy_matches: int
 ) -> tuple[list[dict[str, str]], bool]:
@@ -244,8 +313,10 @@ def _build_rows(
                 "Risk level": best.record.risk_level or "Unknown",
                 "Norwegian level": best.record.norwegian_level or "Unknown",
                 "Predatory reason": best.record.warning_summary or "",
+                "Source": best.record.source or "",
+                "Source URL": best.record.source_url or "",
                 "Norwegian registry search": norwegian_search,
-                "Other matches": str(max(0, len(matches) - 1)),
+                "Missing fields": _missing_field_summary(ref.raw_text, ref),
             }
         else:
             row = {
@@ -258,8 +329,10 @@ def _build_rows(
                 "Risk level": "",
                 "Norwegian level": "",
                 "Predatory reason": "",
+                "Source": "",
+                "Source URL": "",
                 "Norwegian registry search": norwegian_search,
-                "Other matches": "0",
+                "Missing fields": _missing_field_summary(ref.raw_text, ref),
             }
         rows.append(row)
 
@@ -291,6 +364,12 @@ def _style_norwegian_level(value: str) -> str:
     if str(value).strip() in {"0", "1", "2"}:
         return "background-color: rgba(110, 100, 91, 0.12); color: #5d534c; font-weight: 600;"
     return ""
+
+
+def _style_missing_fields(value: str) -> str:
+    if not value or value == "OK":
+        return "color: #3b6b4f; font-weight: 600;"
+    return "background-color: rgba(163, 97, 63, 0.12); color: #7a3f1d; font-weight: 600;"
 
 
 def main() -> None:
@@ -439,13 +518,15 @@ def main() -> None:
             column_config = {
                 "Norwegian registry search": st.column_config.LinkColumn(
                     "Norwegian registry search"
-                )
+                ),
+                "Source URL": st.column_config.LinkColumn("Source URL"),
             }
 
             styled = (
                 df.style.applymap(_style_match_status, subset=["Match status"])
                 .applymap(_style_risk_level, subset=["Risk level"])
                 .applymap(_style_norwegian_level, subset=["Norwegian level"])
+                .applymap(_style_missing_fields, subset=["Missing fields"])
             )
             st.dataframe(
                 styled,

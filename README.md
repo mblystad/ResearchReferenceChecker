@@ -1,124 +1,227 @@
-# Reference Checker
+# Research Reference Checker
 
-Reference Checker validates manuscript references **without altering body text**. It extracts reference list entries, flags issues, and optionally screens journals/publishers against local registries. A Streamlit UI lets you paste a reference list, choose a style, and view a validation table with missing info plus predatory/Norwegian flags.
+Reference Checker validates manuscript references **without changing the manuscript body text**. It extracts in-text citations and reference list entries, flags missing or inconsistent metadata, optionally enriches references using public sources, and can screen journals/publishers against local predatory and Norwegian registry CSVs.
 
-## Project scope (from `PROMPT.md`)
-- **Never modify manuscript body text.** Reference-only processing.
-- Detect citation/reference mismatches and missing metadata.
-- Fetch missing metadata from public databases (Crossref, DOI landing pages, etc.).
-- Produce validation reports and updated reference lists using verified metadata.
+This repository also includes a **Streamlit UI** that is focused on **predatory registry matching for a pasted reference list** (one reference per line). The full validation workflow is available via the CLI and the Python API.
 
-## Current capabilities
-- **UI input:** paste a reference list (one reference per line).
-- **Style checks:** APA, AMA (strict), or Neutral (basic completeness).
-- **Predatory screening:** match journal/publisher against local CSV registries (v6) and surface risk + Norwegian level + manual-check links.
-- **Crossref enrichment (optional):** fetch journal metadata before matching to improve registry hits (requires internet).
-- **Database audit (optional):** export an Excel report of entries that are both in the predatory registry and have Norwegian levels (0/1/2).
-- **Missing info checks:** authors, title, year, journal/venue, volume/issue/pages, DOI/URL (style-aware).
-- **Outputs:** Streamlit table view; CLI remains available for DOCX/PDF/text workflows.
+---
 
-## Reference type detection
-The app classifies entries as journal articles, books/chapters, conference papers, preprints, websites, or datasets and applies type-aware completeness checks.
-For APA/AMA validation, journal articles also require volume, issue, and page ranges when available.
+## What you can do with this project
 
-## Requirements
-- Python 3.11+
-- pip (or another installer) to install dependencies
+### 1) Streamlit UI (fast, non-coder friendly)
+- Paste a reference list (one reference per line) or upload a `.txt` or `.csv` file.
+- Match journal/publisher names against a local predatory registry CSV.
+- See risk level, Norwegian level, and a direct Norwegian registry search link.
+- See a simple missing-field flag for authors, title, journal, and DOI (local regex/heuristics).
+- Tune fuzzy matching sensitivity.
+- Download results as a CSV.
 
-## Quickstart (local IDE: PyCharm / VS Code)
-Think "paint-by-numbers" simple. Follow these steps in order, copy/paste the commands, and you will have the app running.
+### 2) CLI (full reference validation)
+- Parse `.docx`, `.pdf`, or `.txt` manuscripts.
+- Detect missing or uncited references, duplicates, and broken citation markers.
+- Run completeness checks (authors, title, year, DOI/URL, and type-specific fields).
+- Optionally:
+  - Check DOI/URL reachability (HTTP HEAD)
+  - Enrich missing metadata from web pages or Crossref
+  - Verify references against Crossref
+  - Screen journals/publishers against local predatory registries
+- Export:
+  - Updated DOCX (references only, body text preserved as plain text)
+  - JSON report
+  - BibTeX, RIS, EndNote XML
 
-1. **Open a terminal in the project folder**  
-   PyCharm: right-click the project folder -> **Open in Terminal**.  
-   VS Code: View -> **Terminal** (it opens at the project root).
+---
 
-2. **Make a sandbox just for this project (virtual environment)**
+## Quickstart (Streamlit UI - easiest)
+
+This is the quickest way to try the predatory registry matcher.
+
+1. **Open a terminal in this project folder**
+   - Windows File Explorer: right-click the folder and choose **Open in Terminal**.
+
+2. **Create and activate a virtual environment**
    ```bash
    python -m venv .venv
    ```
-   - Windows: run `.venv\Scripts\activate`
-   - macOS/Linux: run `source .venv/bin/activate`
-   Keep this terminal open while you work so the sandbox stays active.
+   - Windows:
+     ```bash
+     .venv\Scripts\activate
+     ```
+   - macOS/Linux:
+     ```bash
+     source .venv/bin/activate
+     ```
 
-3. **Install everything the app needs**
+3. **Install the dependencies**
    ```bash
    pip install -e .
    ```
 
-   Place `predatory_db_v7_with_norwegian_levels.csv` in the project root (or `data/`) to enable predatory/Norwegian screening.
+4. **(Recommended) Place the predatory registry CSV**
+   Put `predatory_db_v7_with_norwegian_levels.csv` in the project root or in `data/`.
 
-4. **Start the Streamlit app**
+5. **Run the Streamlit app**
    ```bash
    streamlit run app.py
    ```
-   - Open your browser at <http://localhost:8501>.
-   - Paste your reference list (one reference per line).
-   - Choose **APA**, **AMA**, or **Neutral**.
-   - Click **Analyze references** to see the table.
 
-5. **Close and reopen later**  
-   Press `Ctrl+C` in the terminal to stop the server. To start again, repeat step 4.
+6. **Use the UI**
+   - Paste one reference per line, or upload a `.txt`/`.csv` file.
+   - Click **Analyze references**.
+   - Download the results CSV if needed.
 
-6. **Run the automated checks (optional but nice)**
+---
+
+## Quickstart (CLI - full validation)
+
+1. **Install and activate the virtual environment** (same as above).
+2. **Run the CLI on a manuscript file**
    ```bash
-   pytest -q
+   reference-checker your_manuscript.docx --json-output results.json
    ```
 
-7. **Use the CLI for DOCX/PDF workflows (optional)**
-   Create a sample DOCX (or point to your own manuscript) and run validation:
+3. **Add optional outputs**
    ```bash
-   python - <<'PY'
-from pathlib import Path
-from reference_checker.app import ReferenceCheckerApp
-
-PARAGRAPHS = [
-    "Dummy Manuscript for Reference Checker",
-    "This short document includes dummy text with in-text citations [1] and [2] to support testing of the reference checker workflow. It also mentions an author-based citation (Doe, 2021) and highlights the importance of consistent metadata [3]. Additional filler sentences ensure the content spans roughly one page when rendered in a standard word processor.",
-    "Methodologically, the sample text outlines a hypothetical pipeline with preprocessing, citation detection, reference parsing, metadata enrichment, and validation reporting [1,3]. The details are intentionally lightweight so that automated tools can focus on references without modifying the surrounding narrative.",
-    "Another paragraph adds variety by discussing limitations, potential error cases, and logging needs [2]. It hints at uncited references and dangling citations to see how the checker flags missing links.",
-    "References",
-    "[1] Doe J. Sample article title. Journal of Testing. 2021;10(2):123-130. doi:10.1234/jt.2021.456.",
-    "[2] Smith A, Lee B. Another study on testing. Proceedings of the Reference Checking Conference; 2020. Available from: https://example.com/testing.",
-    "[3] Patel R. Data validation handbook. Testing Press; 2019.",
-    "[4] Adams K. Preprint example on reference integrity. bioRxiv; 2023. doi:10.1101/2023.12345.",
-]
-
-Path("sample_manuscript.docx").write_bytes(
-    ReferenceCheckerApp._build_minimal_docx(PARAGRAPHS)  # type: ignore[attr-defined]
-)
-PY
-
-   reference-checker sample_manuscript.docx \
+   reference-checker your_manuscript.docx \
      --json-output results.json \
      --updated-docx updated.docx \
      --bibtex-output refs.bib \
      --ris-output refs.ris \
-     --endnote-output refs.xml \
-     --style vancouver
+     --endnote-output refs.xml
    ```
-   Add `--check-links` to perform HTTP reachability checks for DOIs/URLs (requires network access). The CLI prints the same validation report shown in the UI and writes optional JSON/BibTeX/RIS/EndNote/updated DOCX outputs when paths are provided.
-   Add `--web-metadata` to scrape public URL/DOI landing pages for missing authors, titles, years, and page ranges when references are incomplete.
-   Add `--crossref-metadata` to fill gaps using Crossref's API without overwriting existing fields.
-   Add `--verify-online` to compare each reference's title/author/year against Crossref and flag mismatches.
-   Add `--predatory-db path/to.csv` (repeatable) to point at local predatory-journal registries, or `--no-predatory-db` to disable screening.
 
-## Programmatic usage
+4. **Enable optional online checks (requires internet)**
+   ```bash
+   reference-checker your_manuscript.docx \
+     --check-links \
+     --web-metadata \
+     --crossref-metadata \
+     --verify-online
+   ```
+
+5. **Control formatting style for exported references**
+   ```bash
+   reference-checker your_manuscript.docx --style vancouver
+   ```
+   Supported styles: `apa`, `vancouver`, `ieee`, `harvard`, `chicago`.
+
+---
+
+## Inputs supported
+
+### Streamlit UI
+- **Paste text**: one reference per line.
+- **Upload**:
+  - `.txt` (one reference per line)
+  - `.csv` (first column is treated as references)
+
+### CLI / Python API
+- `.docx`
+- `.pdf`
+- `.txt` / `.md`
+
+**Important:** For `.docx`, `.pdf`, and `.txt` files, the parser looks for a line that is exactly `References` or `Bibliography` (case-insensitive). Everything after that heading is treated as the reference list. If the heading is missing, the reference list may be empty.
+
+---
+
+## Outputs
+
+### Streamlit UI
+- Interactive results table
+- Downloadable CSV
+
+### CLI
+- Printed validation report to the terminal
+- Optional output files:
+  - `--json-output` structured data (citations, references, issues)
+  - `--updated-docx` rebuilt DOCX with updated reference list
+  - `--bibtex-output`, `--ris-output`, `--endnote-output`
+
+**Note on updated DOCX:** The updated DOCX is a minimal, clean document created from extracted text and formatted references. It preserves **text content** but does **not preserve original Word formatting**. The reference section also includes explicit "Missing details" lines when issues are detected.
+
+---
+
+## Predatory registry matching
+
+### Where the CSV is loaded from
+The predatory matcher automatically searches for these files (first match wins):
+- `predatory_db_v7_with_norwegian_levels.csv`
+- `predatory_db_v6_manual_check_links.csv`
+- `predatory_db_v5_norwegian_levels.csv`
+- `predatory_db_v5_norwegian_matches.csv`
+
+It checks both the project root and a `data/` folder.
+
+### Minimum useful CSV columns
+The matcher works best with these columns (extra columns are ignored):
+- `name` and `type` (required for name matching)
+- `url`, `url_domain`, or `url_root` (enables domain matching)
+- `risk_level` (or `risk`), `norwegian_level`, `warning_summary`
+- `manual_check_*` columns for optional manual-review links
+- Optional pre-normalized fields like `name_norm` or `abbr_norm` if your CSV already includes them
+
+### Matching logic (high level)
+- **Exact name match** on normalized `name`/`abbr` (or pre-normalized fields if present).
+- **Domain match** if a reference contains a URL and the domain matches a registry entry.
+- **Fuzzy match** (enabled in the UI with threshold control) using token overlap + similarity score.
+
+### What gets reported
+- Match status (Match / No match)
+- Match basis (Exact name / Exact domain / Fuzzy name)
+- Risk level (from the registry)
+- Norwegian level (from the registry)
+- Warning summary and manual-check links (if present in the CSV)
+
+**Important:** These are **warning signals**, not legal or academic determinations. Always verify with the provided manual-check links.
+
+### CLI options for predatory screening
+The CLI will load default registry CSVs automatically if they exist. You can override or disable this behavior:
+- `--predatory-db path/to/registry.csv` (repeatable, add more than one)
+- `--no-predatory-db` (disable screening)
+
+Example:
+```bash
+reference-checker your_manuscript.docx \
+  --predatory-db data/predatory_db_v7_with_norwegian_levels.csv \
+  --json-output results.json
+```
+
+---
+
+## Merging Norwegian levels into the registry CSV
+
+If you have:
+- `predatory_db_v6_manual_check_links.csv`
+- `2025-12-23 Scientific Journals and Series.csv`
+
+You can generate a merged file with Norwegian levels:
+```bash
+python scripts/merge_norwegian_levels.py
+```
+This writes `predatory_db_v7_with_norwegian_levels.csv` in the project root.
+
+---
+
+## Python API (programmatic use)
+
 ```python
 from reference_checker.app import ReferenceCheckerApp
 from reference_checker.link_checker import LinkVerifier
 from reference_checker.web_metadata import WebPageMetadataProvider
 
 checker = ReferenceCheckerApp(
-    link_verifier=LinkVerifier(), metadata_provider=WebPageMetadataProvider()
+    metadata_provider=WebPageMetadataProvider(),
+    link_verifier=LinkVerifier(),
 )
-extraction, issues = checker.process_file("sample_manuscript.docx", check_links=True)
-report = checker.validation_report(extraction.body_text + "\nReferences\n" + extraction.references_text)
-updated_docx_bytes = checker.build_updated_docx(extraction, issues)
+
+extraction, issues = checker.process_file(
+    "sample_manuscript.docx",
+    check_links=True,
+)
+print(len(issues))
 ```
-`updated_docx_bytes` can be written to disk to share an updated reference list copy.
 
-To fill missing fields or cross-check accuracy programmatically, combine providers and verifiers:
-
+You can also add Crossref verification:
 ```python
 from reference_checker.crossref import CrossrefMetadataProvider, OnlineReferenceVerifier
 
@@ -126,22 +229,54 @@ checker = ReferenceCheckerApp(
     metadata_provider=CrossrefMetadataProvider(),
     online_verifier=OnlineReferenceVerifier(),
 )
-_, online_issues = checker.process_file("sample_manuscript.docx", verify_online=True)
+extraction, issues = checker.process_file(
+    "sample_manuscript.docx",
+    verify_online=True,
+)
 ```
 
-## Sample data
-To avoid storing binaries in the repository, use the snippet above (or the `sample_docx_path` pytest fixture) to generate the one-page dummy manuscript on demand. The text includes numbered citations [1], [2], an author citation (Doe, 2021), and a four-entry reference list with one intentionally uncited entry for negative checks.
+---
 
-## Repository map (key modules)
-- `app.py`: Streamlit UI for reference-list validation.
-- `scripts/merge_norwegian_levels.py`: Merge Norwegian levels into predatory registry (creates `predatory_db_v7_with_norwegian_levels.csv`).
-- `src/reference_checker/app.py`: Orchestrates extraction, validation, enrichment, reporting.
-- `src/reference_checker/reference_parser.py`: Reference list parsing heuristics.
-- `src/reference_checker/citation_extractor.py`: In-text citation detection.
-- `src/reference_checker/reference_types.py`: Reference type classification heuristics.
-- `src/reference_checker/validation.py`: Issue detection rules.
-- `src/reference_checker/web_metadata.py`: DOI/URL landing-page scraping.
-- `src/reference_checker/crossref.py`: Crossref metadata and verification.
-- `src/reference_checker/exporters.py`: JSON/BibTeX/RIS/EndNote export helpers.
-- `src/reference_checker/predatory_db.py`: Predatory journal/publisher CSV matching.
-- `src/reference_checker/normalization.py`: Shared normalization helpers for matching.
+## Project layout (key files)
+
+- `app.py`: Streamlit UI for registry matching
+- `src/reference_checker/app.py`: Main orchestration logic for extraction and validation
+- `src/reference_checker/cli.py`: Command-line interface
+- `src/reference_checker/reference_parser.py`: Reference parsing heuristics
+- `src/reference_checker/citation_extractor.py`: In-text citation detection
+- `src/reference_checker/validation.py`: Completeness and consistency checks
+- `src/reference_checker/formatter.py`: Reference formatting (APA/Vancouver/IEEE/Harvard/Chicago)
+- `src/reference_checker/web_metadata.py`: DOI/URL metadata scraping
+- `src/reference_checker/crossref.py`: Crossref metadata + verification
+- `src/reference_checker/predatory_db.py`: Predatory registry matching
+- `scripts/merge_norwegian_levels.py`: Registry merge helper
+
+---
+
+## Troubleshooting
+
+- **"Predatory registry CSV not found" in UI**
+  Place `predatory_db_v7_with_norwegian_levels.csv` in the project root or in `data/`.
+
+- **No references detected**
+  For text files, add a line that says `References` before the reference list. For the UI, use one reference per line.
+
+- **PDF extraction looks wrong**
+  PDF text extraction quality depends on the file. Try a DOCX version if possible.
+
+- **Online checks fail**
+  The `--check-links`, `--web-metadata`, `--crossref-metadata`, and `--verify-online` flags require internet access.
+
+---
+
+## Running tests
+
+```bash
+pytest -q
+```
+
+---
+
+## Notes about other scripts
+
+This repo includes a `scripts/poller.py` and an `src/award_planner` package used for unrelated Seats.aero polling. They are not required for the reference checker. If you want to use them, install extra dependencies from `requirements.txt` and configure `.env.example`.
