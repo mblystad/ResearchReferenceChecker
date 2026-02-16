@@ -12,7 +12,7 @@ class CitationExtractor:
 
     NUMERIC_PATTERN = re.compile(r"\[(?P<labels>[\d,\s\-]+)\]")
     PAREN_PATTERN = re.compile(
-        r"\((?P<author>[A-Z][A-Za-z\-]+)(?:\s+et al\.)?,?\s*(?P<year>\d{4})\)"
+        r"\((?P<author>[A-Z][A-Za-z\-]+)(?:\s+et al\.)?(?:,\s*|\s+)(?P<year>\d{4})\)"
     )
 
     def extract(self, text: str) -> List[Citation]:

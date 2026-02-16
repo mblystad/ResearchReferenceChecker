@@ -57,8 +57,11 @@ This is the quickest way to try the predatory registry matcher.
    pip install -e .
    ```
 
-4. **(Recommended) Place the predatory registry CSV**
-   Put `predatory_db_v7_with_norwegian_levels.csv` in the project root or in `data/`.
+4. **(Recommended) Place the predatory registry CSV files**
+   Put these files in the project root or in `data/`:
+   - `predatory_db_v7_with_norwegian_levels.csv` (main journal/publisher registry with Norwegian levels)
+   - `pred_pub_list.csv` (publisher warning list)
+   - `pred_jour_list.csv` (journal warning list)
 
 5. **Run the Streamlit app**
    ```bash
@@ -143,9 +146,21 @@ This is the quickest way to try the predatory registry matcher.
 
 ## Predatory registry matching
 
-### Where the CSV is loaded from
-The predatory matcher automatically searches for `predatory_db_v7_with_norwegian_levels.csv`
+### Where the CSV files are loaded from
+The predatory matcher automatically searches for:
+- `predatory_db_v7_with_norwegian_levels.csv`
+- `pred_pub_list.csv`
+- `pred_jour_list.csv`
+
 in the project root or in a `data/` folder.
+
+For `pred_pub_list.csv`, matches are tagged with:
+- `source`: `Predatory Journals`
+- `source_url`: `https://www.predatoryjournals.org/the-list/publishers`
+
+For `pred_jour_list.csv`, matches are tagged with:
+- `source`: `Predatory Journals`
+- `source_url`: `https://www.predatoryjournals.org/the-list/journals`
 
 ### Minimum useful CSV columns
 The matcher works best with these columns (extra columns are ignored):
@@ -166,6 +181,7 @@ The matcher works best with these columns (extra columns are ignored):
 - Risk level (from the registry)
 - Norwegian level (from the registry)
 - Warning summary and manual-check links (if present in the CSV)
+- Source and source URL (including Predatory Journals list URLs for `pred_pub_list.csv` and `pred_jour_list.csv` matches)
 
 **Important:** These are **warning signals**, not legal or academic determinations. Always verify with the provided manual-check links.
 
@@ -231,13 +247,15 @@ extraction, issues = checker.process_file(
 - `src/reference_checker/crossref.py`: Crossref metadata + verification
 - `src/reference_checker/predatory_db.py`: Predatory registry matching
 - `predatory_db_v7_with_norwegian_levels.csv`: Predatory registry with Norwegian levels
+- `pred_pub_list.csv`: Predatory Journals publisher warning list
+- `pred_jour_list.csv`: Predatory Journals journal warning list
 
 ---
 
 ## Troubleshooting
 
 - **"Predatory registry CSV not found" in UI**
-  Place `predatory_db_v7_with_norwegian_levels.csv` in the project root or in `data/`.
+  Place `predatory_db_v7_with_norwegian_levels.csv` and/or `pred_pub_list.csv` and/or `pred_jour_list.csv` in the project root or in `data/`.
 
 - **No references detected**
   For text files, add a line that says `References` before the reference list. For the UI, use one reference per line.

@@ -11,7 +11,17 @@ def render_report(issues: List[ValidationIssue], extraction: DocumentExtraction 
 
     header_lines = ["Reference Validation Report"]
     if extraction:
-        header_lines.append(f"Citations detected: {len(extraction.citations)}")
+        unique_citations = extraction.metadata.get("unique_citations")
+        citation_mentions = extraction.metadata.get("citation_mentions")
+        if isinstance(unique_citations, int):
+            if isinstance(citation_mentions, int) and citation_mentions != unique_citations:
+                header_lines.append(
+                    f"Citations detected: {unique_citations} ({citation_mentions} mentions)"
+                )
+            else:
+                header_lines.append(f"Citations detected: {unique_citations}")
+        else:
+            header_lines.append(f"Citations detected: {len(extraction.citations)}")
         header_lines.append(f"Reference entries: {len(extraction.references)}")
         matched = extraction.metadata.get("matched")
         if matched is not None:

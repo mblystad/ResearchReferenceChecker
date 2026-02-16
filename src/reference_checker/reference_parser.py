@@ -58,10 +58,19 @@ class ReferenceListParser:
     def _extract_authors(self, content: str) -> List[str]:
         if not content:
             return []
-        author_part = content.split(".")[0]
-        parts = [a.strip() for a in author_part.split(";") if a.strip()]
-        if not parts:
+        segments = self._sentence_segments(content)
+        if not segments:
+            return []
+        author_part = segments[0]
+        parts: List[str] = []
+        if ";" in author_part:
+            parts = [a.strip() for a in author_part.split(";") if a.strip()]
+        elif " and " in author_part.lower():
+            parts = [a.strip() for a in re.split(r"\band\b", author_part, flags=re.IGNORECASE) if a.strip()]
+        elif "," in author_part and "." not in author_part:
             parts = [a.strip() for a in author_part.split(",") if a.strip()]
+        else:
+            parts = [author_part.strip()]
         return [self._normalize_author(part) for part in parts if part]
 
     def _extract_year(self, content: str) -> str | None:
@@ -72,7 +81,7 @@ class ReferenceListParser:
         match = self.APA_TITLE_JOURNAL_PATTERN.search(content)
         if match:
             return match.group("title").strip()
-        segments = [seg.strip() for seg in content.split(".") if seg.strip()]
+        segments = self._sentence_segments(content)
         if len(segments) > 1:
             return segments[1]
         return None
@@ -81,12 +90,10 @@ class ReferenceListParser:
         match = self.APA_TITLE_JOURNAL_PATTERN.search(content)
         if match:
             return match.group("journal").strip()
-        segments = [seg.strip() for seg in content.split(".") if seg.strip()]
+        segments = self._sentence_segments(content)
         if len(segments) < 3:
             return None
-        title = self._extract_title(content)
-        candidates = [seg for seg in segments if seg and seg != title]
-        for seg in candidates[1:]:
+        for seg in segments[2:]:
             if self._extract_year(seg):
                 break
             if seg.lower().startswith("available from"):
@@ -169,3 +176,6 @@ class ReferenceListParser:
     def _looks_like_dataset(self, entry: ReferenceEntry) -> bool:
         content = entry.raw_text.lower()
         return "dataset" in content or "data set" in content
+
+    def _sentence_segments(self, content: str) -> List[str]:
+        return [seg.strip().rstrip(".") for seg in re.split(r"\.\s+", content) if seg.strip()]

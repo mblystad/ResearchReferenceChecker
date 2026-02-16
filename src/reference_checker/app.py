@@ -106,7 +106,11 @@ class ReferenceCheckerApp:
             references_text=refs_text,
             citations=citations,
             references=references,
-            metadata={"matched": len(matches)},
+            metadata={
+                "matched": len(matches),
+                "citation_mentions": len(citations),
+                "unique_citations": len({citation.normalized_key for citation in citations}),
+            },
         )
         return extraction, validation_issues
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 from pathlib import Path
 from typing import Any, Dict, List
@@ -151,14 +152,17 @@ def main(argv: List[str] | None = None) -> int:
     enable_predatory_db = not args.no_predatory_db
     if args.predatory_db and enable_predatory_db:
         predatory_provider = PredatoryDbProvider.from_csv_paths(args.predatory_db)
-    checker = ReferenceCheckerApp(
-        metadata_provider=metadata_provider,
-        link_verifier=LinkVerifier(),
-        online_verifier=online_verifier,
-        reference_style=args.style,
-        predatory_db=predatory_provider,
-        enable_predatory_db=enable_predatory_db,
-    )
+    checker_kwargs = {
+        "metadata_provider": metadata_provider,
+        "link_verifier": LinkVerifier(),
+        "online_verifier": online_verifier,
+        "reference_style": args.style,
+        "predatory_db": predatory_provider,
+        "enable_predatory_db": enable_predatory_db,
+    }
+    init_params = set(inspect.signature(ReferenceCheckerApp).parameters)
+    filtered_kwargs = {key: value for key, value in checker_kwargs.items() if key in init_params}
+    checker = ReferenceCheckerApp(**filtered_kwargs)
     input_path = Path(args.input)
 
     extraction, issues = checker.process_file(

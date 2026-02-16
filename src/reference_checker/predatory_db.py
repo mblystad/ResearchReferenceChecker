@@ -4,11 +4,22 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional
+import sys
 import csv
 from difflib import SequenceMatcher
 
 from .models import ReferenceEntry, ValidationIssue
 from .normalization import extract_domain, iter_domain_candidates, normalize_text
+
+PRIMARY_REGISTRY_FILENAME = "predatory_db_v7_with_norwegian_levels.csv"
+PUBLISHER_REGISTRY_FILENAME = "pred_pub_list.csv"
+JOURNAL_REGISTRY_FILENAME = "pred_jour_list.csv"
+PUBLISHER_REGISTRY_SOURCE = "Predatory Journals"
+PUBLISHER_REGISTRY_SOURCE_URL = "https://www.predatoryjournals.org/the-list/publishers"
+PUBLISHER_REGISTRY_WARNING = "Listed on Predatory Journals publisher list"
+JOURNAL_REGISTRY_SOURCE = "Predatory Journals"
+JOURNAL_REGISTRY_SOURCE_URL = "https://www.predatoryjournals.org/the-list/journals"
+JOURNAL_REGISTRY_WARNING = "Listed on Predatory Journals journal list"
 
 
 @dataclass(frozen=True)
@@ -60,15 +71,12 @@ class PredatoryDbProvider:
         for path in paths:
             if not path.exists():
                 continue
-            with path.open(newline="", encoding="utf-8") as handle:
-                reader = csv.DictReader(handle)
-                for row in reader:
-                    record = _record_from_row(row)
-                    record_key = record.entry_id or _record_fallback_key(record)
-                    if record_key in records:
-                        continue
-                    records[record_key] = record
-                    _index_record(record, row, name_index, domain_index)
+            for record, row in _iter_records_from_path(path):
+                record_key = record.entry_id or _record_fallback_key(record)
+                if record_key in records:
+                    continue
+                records[record_key] = record
+                _index_record(record, row, name_index, domain_index)
 
         return cls(list(records.values()), name_index, domain_index)
 
@@ -248,6 +256,97 @@ def _record_from_row(row: Dict[str, str]) -> PredatoryDbRecord:
     )
 
 
+def _iter_records_from_path(path: Path) -> List[tuple[PredatoryDbRecord, Dict[str, str]]]:
+    if path.name.lower() == JOURNAL_REGISTRY_FILENAME:
+        return _load_journal_registry(path)
+    if path.name.lower() == PUBLISHER_REGISTRY_FILENAME:
+        return _load_publisher_registry(path)
+    return _load_standard_registry(path)
+
+
+def _load_standard_registry(path: Path) -> List[tuple[PredatoryDbRecord, Dict[str, str]]]:
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            with path.open(newline="", encoding=encoding) as handle:
+                reader = csv.DictReader(handle)
+                rows: List[tuple[PredatoryDbRecord, Dict[str, str]]] = []
+                for row in reader:
+                    if not any(value and value.strip() for value in row.values()):
+                        continue
+                    record = _record_from_row(row)
+                    if not record.name:
+                        continue
+                    rows.append((record, row))
+                return rows
+        except UnicodeDecodeError:
+            continue
+    return []
+
+
+def _load_publisher_registry(path: Path) -> List[tuple[PredatoryDbRecord, Dict[str, str]]]:
+    return _load_simple_named_registry(
+        path,
+        entry_type="publisher",
+        warning_summary=PUBLISHER_REGISTRY_WARNING,
+        source=PUBLISHER_REGISTRY_SOURCE,
+        source_url=PUBLISHER_REGISTRY_SOURCE_URL,
+        skip_tokens={"name", "publisher", "publishers"},
+    )
+
+
+def _load_journal_registry(path: Path) -> List[tuple[PredatoryDbRecord, Dict[str, str]]]:
+    return _load_simple_named_registry(
+        path,
+        entry_type="journal",
+        warning_summary=JOURNAL_REGISTRY_WARNING,
+        source=JOURNAL_REGISTRY_SOURCE,
+        source_url=JOURNAL_REGISTRY_SOURCE_URL,
+        skip_tokens={"name", "journal", "journals"},
+    )
+
+
+def _load_simple_named_registry(
+    path: Path,
+    *,
+    entry_type: str,
+    warning_summary: str,
+    source: str,
+    source_url: str,
+    skip_tokens: set[str],
+) -> List[tuple[PredatoryDbRecord, Dict[str, str]]]:
+    for encoding in ("utf-8", "latin-1"):
+        try:
+            with path.open(newline="", encoding=encoding) as handle:
+                reader = csv.reader(handle)
+                rows: List[tuple[PredatoryDbRecord, Dict[str, str]]] = []
+                for cells in reader:
+                    cleaned_cells = [cell.strip() for cell in cells if cell and cell.strip()]
+                    if not cleaned_cells:
+                        continue
+
+                    non_numeric = [cell for cell in cleaned_cells if not cell.isdigit()]
+                    if not non_numeric:
+                        continue
+                    name = non_numeric[-1]
+                    if name.lower() in skip_tokens:
+                        continue
+
+                    row = {
+                        "name": name,
+                        "type": entry_type,
+                        "risk_level": "High",
+                        "warning_summary": warning_summary,
+                        "source": source,
+                        "source_url": source_url,
+                    }
+                    record = _record_from_row(row)
+                    rows.append((record, row))
+                return rows
+        except UnicodeDecodeError:
+            continue
+    return []
+
+
 def _record_fallback_key(record: PredatoryDbRecord) -> str:
     return f"{record.entry_type}:{normalize_text(record.name)}:{record.url_domain or record.url_root or ''}"
 
@@ -316,21 +415,39 @@ def _format_links(links: Dict[str, str]) -> str | None:
     return "manual checks -> " + "; ".join(parts)
 
 
+def _bundle_roots() -> List[Path]:
+    roots: List[Path] = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        roots.append(Path(meipass))
+    try:
+        roots.append(Path(sys.executable).resolve().parent)
+    except Exception:
+        pass
+    return roots
+
+
 def _default_csv_paths(base_dir: Path | None = None) -> List[Path]:
     roots: List[Path] = []
     if base_dir:
         roots.append(base_dir)
+    roots.extend(_bundle_roots())
     roots.extend([Path.cwd(), Path(__file__).resolve().parents[2]])
 
-    filename = "predatory_db_v7_with_norwegian_levels.csv"
+    filenames = [
+        PRIMARY_REGISTRY_FILENAME,
+        PUBLISHER_REGISTRY_FILENAME,
+        JOURNAL_REGISTRY_FILENAME,
+    ]
     candidates: List[Path] = []
     for root in roots:
-        direct = root / filename
-        if direct.exists():
-            candidates.append(direct)
-        data_path = root / "data" / filename
-        if data_path.exists():
-            candidates.append(data_path)
+        for filename in filenames:
+            direct = root / filename
+            if direct.exists():
+                candidates.append(direct)
+            data_path = root / "data" / filename
+            if data_path.exists():
+                candidates.append(data_path)
 
     unique: List[Path] = []
     seen = set()

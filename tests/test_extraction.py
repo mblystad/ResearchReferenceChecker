@@ -8,6 +8,7 @@ def test_document_parser_splits_references():
     parser = DocumentParser()
     body, refs = parser.split_sections(text)
     assert "Introduction" in body
+    assert "References" not in body
     assert "Doe" in refs
 
 
@@ -30,3 +31,13 @@ def test_reference_parser_extracts_fields():
     assert "Doe" in entries[0].authors[0]
     assert entries[0].year == "2020"
     assert entries[0].doi == "10.1234/example"
+
+
+def test_reference_parser_handles_author_initials_without_field_shift():
+    refs_text = "[1] Doe, J.; Roe, R. Article title. Journal Name. 2020;10(2):10-12."
+    parser = ReferenceListParser()
+    entry = parser.parse(refs_text)[0]
+
+    assert entry.authors[:2] == ["Doe, J.", "Roe, R"]
+    assert entry.title == "Article title"
+    assert entry.journal == "Journal Name"

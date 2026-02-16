@@ -19,8 +19,9 @@ class DocumentParser:
         match = self.REFERENCE_HEADINGS.search(text)
         if not match:
             return text, ""
-        start = match.end()
-        return text[: start].strip(), text[start:].strip()
+        heading_start = match.start()
+        refs_start = match.end()
+        return text[:heading_start].strip(), text[refs_start:].strip()
 
     def load_docx_text(self, file_path: str | Path) -> str:
         """Read a DOCX file and return its text content with paragraph spacing."""
@@ -62,4 +63,7 @@ class DocumentParser:
             return self.load_docx_text(path)
         if suffix == ".pdf":
             return self.load_pdf_text(path)
-        return path.read_text()
+        try:
+            return path.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            return path.read_text(encoding="latin-1")
