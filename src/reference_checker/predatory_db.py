@@ -114,6 +114,7 @@ class PredatoryDbProvider:
         reference: ReferenceEntry,
         *,
         fuzzy: bool = False,
+        scan_raw_text: bool = False,
         fuzzy_threshold: float = 0.88,
         max_fuzzy_matches: int = 3,
         fuzzy_token_threshold: float = 0.8,
@@ -144,13 +145,20 @@ class PredatoryDbProvider:
             matches.extend(
                 self._match_domain(url_domain, expected_types={"journal", "publisher"})
             )
+        if scan_raw_text and reference.raw_text:
+            matches.extend(
+                self._match_name_in_text(
+                    reference.raw_text,
+                    expected_types={"journal", "publisher"},
+                )
+            )
         return _dedupe_matches(matches)
 
     def _match_name(
         self, name: str, expected_types: set[str]
     ) -> List[PredatoryDbMatch]:
         normalized = normalize_text(name)
-        if not normalized:
+        if not normalized or len(normalized) <= 1:
             return []
         records = self._name_index.get(normalized, [])
         matches: List[PredatoryDbMatch] = []
@@ -176,7 +184,7 @@ class PredatoryDbProvider:
         token_threshold: float,
     ) -> List[PredatoryDbMatch]:
         normalized = normalize_text(name)
-        if not normalized:
+        if not normalized or len(normalized) <= 1:
             return []
         token_set = set(normalized.split())
         if not token_set:
@@ -231,6 +239,44 @@ class PredatoryDbProvider:
                             score=1.0,
                         )
                     )
+        return matches
+
+    def _match_name_in_text(
+        self,
+        text: str,
+        *,
+        expected_types: set[str],
+        min_single_token_len: int = 5,
+    ) -> List[PredatoryDbMatch]:
+        normalized_text = normalize_text(text)
+        if not normalized_text:
+            return []
+
+        padded_text = f" {normalized_text} "
+        text_tokens = set(normalized_text.split())
+        matches: List[PredatoryDbMatch] = []
+
+        for candidate_norm, records in self._name_index.items():
+            candidate_tokens = candidate_norm.split()
+            if not candidate_tokens:
+                continue
+            if len(candidate_tokens) == 1 and len(candidate_tokens[0]) < min_single_token_len:
+                continue
+            if not set(candidate_tokens).issubset(text_tokens):
+                continue
+            if f" {candidate_norm} " not in padded_text:
+                continue
+            for record in records:
+                if record.entry_type in expected_types:
+                    matches.append(
+                        PredatoryDbMatch(
+                            record=record,
+                            basis="text-name",
+                            matched_value=record.name,
+                            score=0.95,
+                        )
+                    )
+
         return matches
 
 
@@ -330,6 +376,10 @@ def _load_simple_named_registry(
                     name = non_numeric[-1]
                     if name.lower() in skip_tokens:
                         continue
+                    # Some source lists include alphabet separators like "C", "J".
+                    # Treat 1-character names as non-record noise.
+                    if len(normalize_text(name)) <= 1:
+                        continue
 
                     row = {
                         "name": name,
@@ -360,7 +410,7 @@ def _index_record(
     for key in ("name_norm", "name", "abbr_norm", "abbr"):
         value = row.get(key)
         normalized = normalize_text(value)
-        if normalized:
+        if normalized and len(normalized) > 1:
             name_index.setdefault(normalized, []).append(record)
 
     for key in ("url_domain", "url_root", "url"):

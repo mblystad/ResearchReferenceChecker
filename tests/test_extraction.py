@@ -41,3 +41,30 @@ def test_reference_parser_handles_author_initials_without_field_shift():
     assert entry.authors[:2] == ["Doe, J.", "Roe, R"]
     assert entry.title == "Article title"
     assert entry.journal == "Journal Name"
+
+
+def test_reference_parser_handles_mdpi_style_abbreviated_journal_with_tags():
+    refs_text = (
+        "Beck, A.T.; Epstein, N.; Brown, G.; Steer, R.A. "
+        "An inventory for measuring clinical anxiety: Psychometric properties. "
+        "J. Consult Clin. Psychol. 1988, 56, 893–897. [Google Scholar] [CrossRef]"
+    )
+    parser = ReferenceListParser()
+    entry = parser.parse(refs_text)[0]
+
+    assert entry.year == "1988"
+    assert entry.title == "An inventory for measuring clinical anxiety: Psychometric properties"
+    assert entry.journal == "J. Consult Clin. Psychol"
+
+
+def test_reference_parser_handles_int_j_cardiol_style_with_resource_tags():
+    refs_text = (
+        "Li, S.; Zhou, X.; Yu, L.; Jiang, H. "
+        "Low level non-invasive vagus nerve stimulation: A novel feasible therapeutic approach for atrial fibrillation. "
+        "Int. J. Cardiol. 2015, 182, 189–190. [Google Scholar] [CrossRef] [PubMed]"
+    )
+    parser = ReferenceListParser()
+    entry = parser.parse(refs_text)[0]
+
+    assert entry.year == "2015"
+    assert entry.journal == "Int. J. Cardiol"

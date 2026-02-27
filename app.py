@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import base64
 import csv
 import re
 import sys
 from html import escape
-from io import StringIO
+from io import BytesIO, StringIO
 from pathlib import Path
 from urllib.parse import quote_plus
 
@@ -17,22 +18,121 @@ if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
 from reference_checker.predatory_db import PredatoryDbMatch, PredatoryDbProvider  # noqa: E402
+from reference_checker.normalization import extract_domain, normalize_text  # noqa: E402
 from reference_checker.reference_parser import ReferenceListParser  # noqa: E402
 
 
 BASIS_LABELS = {
     "name": "Exact name match",
     "domain": "Exact website/domain match",
+    "text-name": "Name found in reference text",
     "fuzzy-name": "Similar name match",
 }
 
 BASIS_PRIORITY = {
     "name": 3,
+    "text-name": 2,
     "domain": 2,
     "fuzzy-name": 1,
 }
 
 DOI_REGEX = re.compile(r"10\.\d{4,9}/\S+", re.IGNORECASE)
+
+CUSTOM_WATCHLIST_FILENAME = "custom_watchlist.csv"
+CUSTOM_WATCHLIST_COLUMNS = [
+    "name",
+    "type",
+    "url_domain",
+    "risk_level",
+    "warning_summary",
+    "source",
+    "source_url",
+    "entry_id",
+]
+
+STARTER_WATCHLIST = [
+    {
+        "name": "MDPI",
+        "type": "publisher",
+        "url_domain": "mdpi.com",
+        "risk_level": "Medium",
+        "warning_summary": (
+            "Finnish JUFO downgraded many MDPI journals to level 0 as part of grey-area review."
+        ),
+        "source": "Publication Forum (JUFO), Dec 16, 2024",
+        "source_url": "https://julkaisufoorumi.fi/en/news/changes-classification",
+    },
+    {
+        "name": "Frontiers Media",
+        "type": "publisher",
+        "url_domain": "frontiersin.org",
+        "risk_level": "Medium",
+        "warning_summary": (
+            "Finnish JUFO downgraded many Frontiers journals to level 0 as part of grey-area review."
+        ),
+        "source": "Publication Forum (JUFO), Dec 16, 2024",
+        "source_url": "https://julkaisufoorumi.fi/en/news/changes-classification",
+    },
+    {
+        "name": "Hindawi",
+        "type": "publisher",
+        "url_domain": "hindawi.com",
+        "risk_level": "High",
+        "warning_summary": (
+            "Wiley reported a publishing pause in special issues due to compromised articles."
+        ),
+        "source": "Wiley FY2023 Q3 results",
+        "source_url": (
+            "https://newsroom.wiley.com/press-releases/press-release-details/2023/"
+            "Wiley-Reports-Third-Quarter-Fiscal-Year-2023-Results/default.aspx"
+        ),
+    },
+    {
+        "name": "OMICS Group",
+        "type": "publisher",
+        "url_domain": "omicsonline.org",
+        "risk_level": "High",
+        "warning_summary": (
+            "FTC court ruling found deceptive claims and inadequate fee disclosure."
+        ),
+        "source": "US FTC press release",
+        "source_url": (
+            "https://www.ftc.gov/news-events/news/press-releases/2019/04/"
+            "court-rules-ftcs-favor-against-predatory-academic-publisher-omics-group-"
+            "imposes-501-million-judgment"
+        ),
+    },
+    {
+        "name": "iMedPub",
+        "type": "publisher",
+        "url_domain": "imedpub.com",
+        "risk_level": "High",
+        "warning_summary": (
+            "Named in the FTC's OMICS case alleging deceptive claims and hidden fees."
+        ),
+        "source": "US FTC press release",
+        "source_url": (
+            "https://www.ftc.gov/news-events/news/press-releases/2019/04/"
+            "court-rules-ftcs-favor-against-predatory-academic-publisher-omics-group-"
+            "imposes-501-million-judgment"
+        ),
+    },
+    {
+        "name": "Conference Series",
+        "type": "publisher",
+        "url_domain": "conferenceeries.com",
+        "risk_level": "High",
+        "warning_summary": (
+            "Named in the FTC's OMICS case alleging deceptive conference and journal claims."
+        ),
+        "source": "US FTC press release",
+        "source_url": (
+            "https://www.ftc.gov/news-events/news/press-releases/2019/04/"
+            "court-rules-ftcs-favor-against-predatory-academic-publisher-omics-group-"
+            "imposes-501-million-judgment"
+        ),
+    },
+]
 
 SAMPLE_TEXT = """Nashif, S., Raihan, M. R., Islam, M. R., & Imam, M. H. (2018). Heart disease detection by using machine learning algorithms and a real-time cardiovascular health monitoring system. World Journal of Engineering and Technology, 6, 854–873. https://doi.org/10.4236/wjet.2018.64057
 
@@ -54,38 +154,96 @@ Watson, J. D., & Crick, F. H. C. (1953). Molecular structure of nucleic acids: A
 
 THEME_CSS = """
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Merriweather:wght@400;700&family=Source+Sans+3:wght@400;600&display=swap');
-
 :root {
-  --paper: #f6f1e7;
-  --paper-deep: #efe4d4;
-  --panel: #fffaf1;
-  --ink: #2b2a28;
-  --muted: #6e645b;
-  --accent: #7b5a3a;
-  --accent-soft: #e9dccb;
-  --success: #3b6b4f;
-  --warning: #a3613f;
-  --border: #e1d4c2;
-  --shadow: 0 12px 32px rgba(67, 54, 41, 0.12);
+  --paper: #0d1218;
+  --paper-deep: #151b22;
+  --panel: #121a22;
+  --ink: #f7fafc;
+  --muted: #d5dde6;
+  --accent: #cf2436;
+  --accent-soft: #45232b;
+  --success: #ddf6ea;
+  --warning: #ffe9ec;
+  --border: #445361;
+  --link: #8dc7ff;
+  --shadow: 0 14px 30px rgba(0, 0, 0, 0.42);
 }
 
-html, body, [data-testid="stAppViewContainer"] {
+html, body, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
   background:
-    radial-gradient(circle at 25% 15%, rgba(255, 250, 238, 0.8) 0, rgba(255, 250, 238, 0) 45%),
-    radial-gradient(circle at 75% 10%, rgba(246, 232, 214, 0.7) 0, rgba(246, 232, 214, 0) 48%),
-    linear-gradient(180deg, var(--paper) 0%, #f9f4ec 100%);
+    radial-gradient(circle at 15% 0%, rgba(207, 36, 54, 0.18) 0, rgba(207, 36, 54, 0) 37%),
+    radial-gradient(circle at 85% 0%, rgba(105, 131, 160, 0.12) 0, rgba(105, 131, 160, 0) 39%),
+    linear-gradient(180deg, var(--paper) 0%, #101720 100%);
   color: var(--ink);
-  font-family: "Source Sans 3", sans-serif;
+  font-family: Calibri, "Segoe UI", Tahoma, sans-serif;
 }
 
 h1, h2, h3, .headline {
-  font-family: "Merriweather", serif !important;
+  font-family: Calibri, "Segoe UI", Tahoma, sans-serif !important;
   color: var(--ink);
 }
 
+.stMarkdown,
+[data-testid="stMarkdownContainer"],
+[data-testid="stMarkdownContainer"] p,
+[data-testid="stWidgetLabel"] p,
+[data-testid="stCaptionContainer"] p,
+label,
+p,
+li {
+  color: var(--ink) !important;
+}
+
+[data-testid="stCaptionContainer"] p,
+.footer-note {
+  color: var(--muted) !important;
+}
+
+[data-testid="stAppViewContainer"] a {
+  color: var(--link);
+}
+
+[data-testid="stAppViewContainer"] a:hover {
+  color: #c0e2ff;
+}
+
+.stTextInput input,
+.stNumberInput input,
+.stTextArea textarea,
+div[data-baseweb="select"] > div,
+div[data-baseweb="base-input"] > div {
+  border-radius: 12px !important;
+  border: 1px solid var(--border) !important;
+  background: #0f161d !important;
+  color: var(--ink) !important;
+}
+
+.stTextInput input::placeholder,
+.stTextArea textarea::placeholder {
+  color: #cbd3dc !important;
+  opacity: 1 !important;
+}
+
+div[data-baseweb="menu"] {
+  background: #121a22 !important;
+  border: 1px solid var(--border) !important;
+}
+
+div[data-baseweb="menu"] * {
+  color: var(--ink) !important;
+}
+
+div[data-baseweb="tag"] {
+  background: #243448 !important;
+  border: 1px solid #3f5370 !important;
+}
+
+div[data-baseweb="tag"] span {
+  color: var(--ink) !important;
+}
+
 .hero {
-  background: linear-gradient(135deg, rgba(255,250,238,0.9), rgba(239,228,212,0.85));
+  background: linear-gradient(135deg, rgba(22, 30, 39, 0.96), rgba(17, 24, 33, 0.94));
   border: 1px solid var(--border);
   border-radius: 18px;
   padding: 22px 28px;
@@ -94,9 +252,38 @@ h1, h2, h3, .headline {
   animation: fade-in 360ms ease-out;
 }
 
+.hero-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.hero-logo {
+  width: 74px;
+  max-width: 18vw;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #e1e6eb;
+  padding: 8px;
+}
+
 .hero p {
   color: var(--muted);
-  margin-top: 0.4rem;
+  margin: 0.35rem 0 0;
+}
+
+@media (max-width: 720px) {
+  .hero-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .hero-logo {
+    width: 66px;
+  }
 }
 
 .panel {
@@ -104,7 +291,7 @@ h1, h2, h3, .headline {
   border: 1px solid var(--border);
   border-radius: 16px;
   padding: 18px 20px;
-  box-shadow: 0 8px 20px rgba(67, 54, 41, 0.08);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.3);
   animation: rise-in 380ms ease-out;
 }
 
@@ -116,16 +303,16 @@ h1, h2, h3, .headline {
   font-size: 0.75rem;
   font-weight: 600;
   background: var(--accent-soft);
-  color: var(--accent);
+  color: #ffecef;
   margin-right: 8px;
 }
 
-.chip-success { background: rgba(59, 107, 79, 0.12); color: var(--success); }
-.chip-warning { background: rgba(163, 97, 63, 0.12); color: var(--warning); }
-.chip-neutral { background: rgba(110, 100, 91, 0.12); color: var(--muted); }
+.chip-success { background: rgba(44, 105, 74, 0.42); color: var(--success); }
+.chip-warning { background: rgba(157, 32, 46, 0.52); color: var(--warning); }
+.chip-neutral { background: rgba(80, 99, 120, 0.46); color: var(--ink); }
 
 .stat-card {
-  background: #fbf7ef;
+  background: #1a2530;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 14px 16px;
@@ -147,7 +334,8 @@ h1, h2, h3, .headline {
 .stTextArea textarea {
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: #fffdfa;
+  background: #0f161d;
+  color: var(--ink);
 }
 
 .stButton button {
@@ -155,12 +343,32 @@ h1, h2, h3, .headline {
   color: white;
   border-radius: 999px;
   padding: 0.4rem 1.4rem;
-  border: none;
+  border: 1px solid #e26e7a;
+}
+
+[data-testid="stDownloadButton"] button {
+  background: #254f8a;
+  color: #f8fbff;
+  border-radius: 999px;
+  border: 1px solid #4f7ec0;
 }
 
 .stButton button:hover {
-  background: #6a4c31;
+  background: #a8192a;
   color: white;
+}
+
+[data-testid="stDownloadButton"] button:hover {
+  background: #1d4377;
+  color: #f8fbff;
+}
+
+[data-testid="stAlertContainer"] {
+  border-radius: 12px;
+}
+
+[data-testid="stAlertContainer"] * {
+  color: var(--ink) !important;
 }
 
 [data-testid="stDataFrame"] {
@@ -169,16 +377,54 @@ h1, h2, h3, .headline {
   overflow: hidden;
 }
 
-.footer-note {
-  color: var(--muted);
-  font-size: 0.85rem;
+[data-testid="stDataFrame"] [role="columnheader"] {
+  background: #1e2a36;
+  color: var(--ink);
+}
+
+[data-testid="stDataFrame"] [role="gridcell"] {
+  color: #edf2f7;
 }
 
 .detail-card {
-  background: #fbf7ef;
+  background: #1a2530;
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 12px 14px;
+}
+
+.legend {
+  display: grid;
+  gap: 8px;
+  margin: 0.4rem 0 1rem;
+}
+
+.legend-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.legend-badge {
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-weight: 700;
+  font-size: 0.78rem;
+  min-width: 178px;
+  text-align: center;
+}
+
+.badge-immediate { background: #7c1f2a; color: #fff5f7; }
+.badge-manual { background: #5b4720; color: #fff6d8; }
+.badge-details { background: #4f6072; color: #f8fbff; }
+.badge-ok { background: #2c5b48; color: #eefbf3; }
+.badge-flag { background: #2a3542; color: #f1f5f9; }
+
+*:focus-visible {
+  outline: 2px solid #ffd447 !important;
+  outline-offset: 2px !important;
 }
 
 @keyframes fade-in {
@@ -257,6 +503,115 @@ def _load_uploaded_csv(raw_bytes: bytes, separator: str = "auto") -> pd.DataFram
     decoded = _decode_uploaded_text(raw_bytes)
     chosen_separator = _guess_csv_separator(decoded) if separator == "auto" else separator
     return pd.read_csv(StringIO(decoded), sep=chosen_separator)
+
+
+def _build_excel_bytes(df: pd.DataFrame) -> bytes:
+    from openpyxl.utils import get_column_letter
+
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Reference Check Results")
+        worksheet = writer.sheets["Reference Check Results"]
+        worksheet.freeze_panes = "A2"
+        worksheet.auto_filter.ref = worksheet.dimensions
+
+        for col_idx, column_name in enumerate(df.columns, start=1):
+            sample_series = df[column_name].fillna("").astype(str).head(250)
+            longest_sample = max([len(str(column_name)), *[len(value) for value in sample_series]], default=12)
+            worksheet.column_dimensions[get_column_letter(col_idx)].width = min(
+                max(longest_sample + 2, 12),
+                58,
+            )
+    return output.getvalue()
+
+
+def _custom_watchlist_path() -> Path:
+    return ROOT / "data" / CUSTOM_WATCHLIST_FILENAME
+
+
+def _empty_custom_watchlist_df() -> pd.DataFrame:
+    return pd.DataFrame(columns=CUSTOM_WATCHLIST_COLUMNS)
+
+
+def _load_custom_watchlist_df(path: Path | None = None) -> pd.DataFrame:
+    target = path or _custom_watchlist_path()
+    if not target.exists():
+        return _empty_custom_watchlist_df()
+    try:
+        df = pd.read_csv(target)
+    except Exception:
+        return _empty_custom_watchlist_df()
+
+    for column in CUSTOM_WATCHLIST_COLUMNS:
+        if column not in df.columns:
+            df[column] = ""
+    df = df[CUSTOM_WATCHLIST_COLUMNS].fillna("")
+    df["name"] = df["name"].astype(str).str.strip()
+    df["type"] = df["type"].astype(str).str.strip().replace("", "publisher")
+    df["url_domain"] = df["url_domain"].astype(str).str.strip().map(lambda val: extract_domain(val) or "")
+    df["entry_id"] = df["entry_id"].astype(str).str.strip()
+    missing_ids = df["entry_id"] == ""
+    if missing_ids.any():
+        df.loc[missing_ids, "entry_id"] = df[missing_ids].apply(
+            lambda row: _watchlist_entry_id(str(row["name"]), str(row["url_domain"])),
+            axis=1,
+        )
+    df = df[df["name"] != ""].drop_duplicates(subset=["entry_id"], keep="first").reset_index(drop=True)
+    return df
+
+
+def _save_custom_watchlist_df(df: pd.DataFrame, path: Path | None = None) -> None:
+    target = path or _custom_watchlist_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    clean = df.copy()
+    for column in CUSTOM_WATCHLIST_COLUMNS:
+        if column not in clean.columns:
+            clean[column] = ""
+    clean = clean[CUSTOM_WATCHLIST_COLUMNS].fillna("")
+    clean.to_csv(target, index=False, encoding="utf-8")
+
+
+def _watchlist_entry_id(name: str, domain: str) -> str:
+    norm_name = normalize_text(name)
+    norm_domain = extract_domain(domain) or ""
+    return f"custom:{norm_name}:{norm_domain}"
+
+
+def _watchlist_display_label(row: pd.Series) -> str:
+    name = str(row.get("name", "")).strip()
+    domain = str(row.get("url_domain", "")).strip()
+    concern = str(row.get("risk_level", "")).strip()
+    pieces = [name]
+    if domain:
+        pieces.append(f"({domain})")
+    if concern:
+        pieces.append(f"[{concern}]")
+    return " ".join(pieces).strip()
+
+
+def _append_watchlist_rows(existing: pd.DataFrame, rows: list[dict[str, str]]) -> tuple[pd.DataFrame, int]:
+    if not rows:
+        return existing, 0
+    incoming = pd.DataFrame(rows)
+    for column in CUSTOM_WATCHLIST_COLUMNS:
+        if column not in incoming.columns:
+            incoming[column] = ""
+    incoming = incoming[CUSTOM_WATCHLIST_COLUMNS].fillna("")
+    incoming["name"] = incoming["name"].astype(str).str.strip()
+    incoming["type"] = incoming["type"].astype(str).str.strip().replace("", "publisher")
+    incoming["url_domain"] = incoming["url_domain"].astype(str).str.strip().map(lambda val: extract_domain(val) or "")
+    incoming["entry_id"] = incoming.apply(
+        lambda row: _watchlist_entry_id(str(row["name"]), str(row["url_domain"])),
+        axis=1,
+    )
+    incoming = incoming[incoming["name"] != ""]
+    if incoming.empty:
+        return existing, 0
+
+    merged = pd.concat([existing, incoming], ignore_index=True)
+    merged = merged.drop_duplicates(subset=["entry_id"], keep="first").reset_index(drop=True)
+    added = len(merged) - len(existing)
+    return merged, max(added, 0)
 
 
 def _extract_reference_text_from_upload(
@@ -454,6 +809,10 @@ def _missing_field_summary(ref) -> str:
 def _action_needed(row: dict[str, str]) -> str:
     risk = (row.get("Risk level") or "").lower()
     completeness = row.get("Reference check") or ""
+    if row.get("Custom watchlist warning") == "Match":
+        if "high" in risk:
+            return "Check immediately"
+        return "Check manually"
     if "high" in risk:
         return "Check immediately"
     if "medium" in risk:
@@ -471,6 +830,7 @@ def _build_rows(
     fuzzy_threshold: float,
     max_fuzzy_matches: int,
     pred_db: PredatoryDbProvider | None = None,
+    custom_db: PredatoryDbProvider | None = None,
 ) -> tuple[list[dict[str, str]], bool]:
     parser = ReferenceListParser()
     references = parser.parse(reference_text)
@@ -493,7 +853,19 @@ def _build_rows(
             if provider
             else []
         )
+        custom_matches = (
+            custom_db.match_reference(
+                ref,
+                fuzzy=True,
+                scan_raw_text=True,
+                fuzzy_threshold=fuzzy_threshold,
+                max_fuzzy_matches=max_fuzzy_matches,
+            )
+            if custom_db
+            else []
+        )
         best = _pick_best_match(matches)
+        best_custom = _pick_best_match(custom_matches)
         if best:
             row = {
                 "Reference": ref.raw_text,
@@ -526,6 +898,28 @@ def _build_rows(
                 "Norwegian registry search": norwegian_search,
                 "Reference check": _missing_field_summary(ref),
             }
+        if best_custom:
+            row["Custom watchlist warning"] = "Match"
+            row["Custom watchlist entry"] = best_custom.record.name
+            row["Custom matched text"] = best_custom.matched_value
+            row["Custom match method"] = _format_basis(best_custom.basis)
+            row["Custom confidence"] = _format_score(best_custom.score)
+            row["Custom note"] = best_custom.record.warning_summary or ""
+            row["Custom source"] = best_custom.record.source or "Custom watchlist"
+            row["Custom source URL"] = best_custom.record.source_url or ""
+            if not row.get("Risk level"):
+                row["Risk level"] = best_custom.record.risk_level or "Medium"
+            if not row.get("Registry note"):
+                row["Registry note"] = best_custom.record.warning_summary or ""
+        else:
+            row["Custom watchlist warning"] = "No match"
+            row["Custom watchlist entry"] = ""
+            row["Custom matched text"] = ""
+            row["Custom match method"] = ""
+            row["Custom confidence"] = ""
+            row["Custom note"] = ""
+            row["Custom source"] = ""
+            row["Custom source URL"] = ""
         row["Recommended next step"] = _action_needed(row)
         rows.append(row)
 
@@ -533,44 +927,52 @@ def _build_rows(
 
 
 def _style_match_status(value: str) -> str:
-    if value == "Match":
-        return "background-color: rgba(59, 107, 79, 0.12); color: #2f5d42; font-weight: 600;"
-    return "background-color: rgba(163, 97, 63, 0.12); color: #7a3f1d; font-weight: 600;"
+    value_norm = str(value or "").strip().lower()
+    if value_norm in {"match", "flagged"}:
+        return "background-color: #7c1f2a; color: #fff5f7; font-weight: 700;"
+    return "background-color: #2a3542; color: #f1f5f9; font-weight: 600;"
+
+
+def _style_custom_status(value: str) -> str:
+    value_norm = str(value or "").strip().lower()
+    if value_norm in {"match", "flagged"}:
+        return "background-color: #7c1f2a; color: #fff5f7; font-weight: 700;"
+    return "background-color: #2a3542; color: #f1f5f9; font-weight: 600;"
 
 
 def _style_risk_level(value: str) -> str:
     if not value or value == "Unknown":
-        return "color: #6e645b;"
+        return "color: #d5dde6;"
     value_norm = value.lower()
     if "high" in value_norm:
-        return "background-color: rgba(163, 97, 63, 0.16); color: #7a3f1d; font-weight: 600;"
+        return "background-color: #7c1f2a; color: #fff5f7; font-weight: 700;"
     if "medium" in value_norm:
-        return "background-color: rgba(123, 90, 58, 0.14); color: #6a4c31; font-weight: 600;"
+        return "background-color: #4f6072; color: #f8fbff; font-weight: 700;"
     if "low" in value_norm:
-        return "background-color: rgba(59, 107, 79, 0.12); color: #2f5d42; font-weight: 600;"
+        return "background-color: #2c5b48; color: #eefbf3; font-weight: 700;"
     return ""
 
 
 def _style_norwegian_level(value: str) -> str:
     if not value or value == "Unknown":
-        return "color: #6e645b;"
+        return "color: #d5dde6;"
     if str(value).strip() in {"0", "1", "2"}:
-        return "background-color: rgba(110, 100, 91, 0.12); color: #5d534c; font-weight: 600;"
+        return "background-color: #2a3542; color: #f1f5f9; font-weight: 700;"
     return ""
 
 
 def _style_missing_fields(value: str) -> str:
     if not value or value == "OK":
-        return "color: #3b6b4f; font-weight: 600;"
-    return "background-color: rgba(163, 97, 63, 0.12); color: #7a3f1d; font-weight: 600;"
+        return "color: #f1f5f9; font-weight: 700;"
+    return "background-color: #7c1f2a; color: #fff5f7; font-weight: 700;"
 
 
 def _style_action(value: str) -> str:
     if value == "Check immediately":
-        return "background-color: rgba(163, 97, 63, 0.2); color: #7a3f1d; font-weight: 700;"
+        return "background-color: #7c1f2a; color: #fff5f7; font-weight: 700;"
     if value in {"Check manually", "Add missing details"}:
-        return "background-color: rgba(123, 90, 58, 0.14); color: #6a4c31; font-weight: 600;"
-    return "color: #3b6b4f; font-weight: 600;"
+        return "background-color: #5b4720; color: #fff6d8; font-weight: 700;"
+    return "color: #f1f5f9; font-weight: 700;"
 
 
 def _short_text(value: str, max_len: int = 110) -> str:
@@ -582,35 +984,83 @@ def _short_text(value: str, max_len: int = 110) -> str:
 
 def _view_options() -> list[str]:
     return [
-        "All references",
         "Needs attention",
-        "Registry matches",
-        "No registry match",
+        "All references",
+        "Registry-flagged",
+        "Watchlist-flagged",
+        "Not found in registry",
         "Missing details",
     ]
 
 
 def _pick_view() -> str:
     options = _view_options()
-    label = "Quick view"
+    default_option = "Needs attention"
+    label = "Quick filter"
     if hasattr(st, "segmented_control"):
         try:
-            return st.segmented_control(label, options=options, default=options[0])  # type: ignore[attr-defined]
+            return st.segmented_control(label, options=options, default=default_option)  # type: ignore[attr-defined]
         except TypeError:
             return st.segmented_control(label, options=options)  # type: ignore[attr-defined]
-    return st.radio(label, options=options, horizontal=True)
+    return st.radio(label, options=options, horizontal=True, index=options.index(default_option))
 
 
 def _filter_rows(df: pd.DataFrame, view_name: str) -> pd.DataFrame:
     if view_name == "Needs attention":
         return df[df["Recommended next step"].isin(["Check immediately", "Check manually"])]
-    if view_name == "Registry matches":
+    if view_name == "Registry-flagged":
         return df[df["Registry warning"] == "Match"]
-    if view_name == "No registry match":
+    if view_name == "Watchlist-flagged":
+        return df[df["Custom watchlist warning"] == "Match"]
+    if view_name == "Not found in registry":
         return df[df["Registry warning"] == "No match"]
     if view_name == "Missing details":
         return df[df["Reference check"] != "OK"]
     return df
+
+
+def _sort_for_review(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty:
+        return df
+    action_rank = {
+        "Check immediately": 0,
+        "Check manually": 1,
+        "Add missing details": 2,
+    }
+    risk_rank = {
+        "high": 0,
+        "medium": 1,
+        "low": 2,
+        "unknown": 3,
+        "": 3,
+    }
+    ranked = df.assign(
+        _action_rank=df["Recommended next step"].map(action_rank).fillna(9).astype(int),
+        _risk_rank=df["Risk level"]
+        .fillna("")
+        .astype(str)
+        .str.strip()
+        .str.lower()
+        .map(risk_rank)
+        .fillna(9)
+        .astype(int),
+    )
+    return (
+        ranked.sort_values(by=["_action_rank", "_risk_rank", "Reference"], ascending=[True, True, True])
+        .drop(columns=["_action_rank", "_risk_rank"])
+        .reset_index(drop=True)
+    )
+
+
+def _logo_data_uri() -> str:
+    logo_path = ROOT / "reflogo.png"
+    if not logo_path.exists():
+        return ""
+    try:
+        encoded = base64.b64encode(logo_path.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+    return f"data:image/png;base64,{encoded}"
 
 
 def main() -> None:
@@ -634,40 +1084,41 @@ def main() -> None:
         st.session_state.analysis_pred_db_loaded = False
     if "analysis_notice" not in st.session_state:
         st.session_state.analysis_notice = ""
+    if "custom_watchlist_df" not in st.session_state:
+        st.session_state.custom_watchlist_df = _load_custom_watchlist_df()
 
+    logo_uri = _logo_data_uri()
+    logo_html = f'<img class="hero-logo" src="{logo_uri}" alt="Reference Checker logo" />' if logo_uri else ""
     st.markdown(
-        """
+        f"""
         <div class="hero">
-          <div class="headline" style="font-size:2.1rem; font-weight:700;">Predatory Reference Checker</div>
-          <p>Paste references and flag possible predatory journal/publisher warnings with Norwegian registry context.</p>
-          <p><strong>Important:</strong> this is a screening tool. Always make a final manual decision.</p>
-          <div style="margin-top: 0.6rem;">
-            <span class="chip">One reference per line</span>
-            <span class="chip">Fuzzy matching</span>
-            <span class="chip">Registry aware</span>
+          <div class="hero-head">
+            {logo_html}
+            <div class="headline" style="font-size:2.1rem; font-weight:700;">Predatory Reference Checker</div>
           </div>
+          <p>Check reference lists for missing details and possible registry matches.</p>
+          <p><strong>Important:</strong> review flagged entries before making a final decision.</p>
         </div>
         """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        _chip("Built for non-coders", "success")
-        + _chip("Fast screening workflow", "neutral")
-        + _chip("Manual decision always required", "warning"),
         unsafe_allow_html=True,
     )
 
     left, right = st.columns([0.44, 0.56], gap="large")
     pred_db = PredatoryDbProvider.load_default(base_dir=ROOT)
+    custom_watchlist_path = _custom_watchlist_path()
+    custom_watchlist_df = st.session_state.custom_watchlist_df
 
     with left:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("Step 1: Add References")
-        st.caption("Paste references directly or import from a file.")
+        st.subheader("1. Add references")
+        st.caption(
+            "Paste your references, load a sample, or upload a TXT/CSV file. "
+            "Supports APA and compact formats like `Journal. 2015, 182, 189-190. [Google Scholar]`."
+        )
 
         sample_col, clear_col = st.columns([0.5, 0.5])
         with sample_col:
-            if st.button("Use sample data", key="use_sample_data"):
+            if st.button("Load sample", key="use_sample_data"):
                 st.session_state.reference_text = SAMPLE_TEXT
                 st.session_state.analysis_ran = False
 
@@ -681,16 +1132,116 @@ def main() -> None:
 
         if pred_db is None:
             st.warning(
-                "Registry data is not loaded. Place "
-                "`predatory_db_v7_with_norwegian_levels.csv`, `pred_pub_list.csv`, and/or "
-                "`pred_jour_list.csv` "
-                "in the project root or `data/` to enable predatory matching."
+                "Registry files are not loaded. This run can still check reference completeness."
             )
 
+        with st.expander("Custom watchlist filter", expanded=False):
+            st.caption(
+                "Add publishers or journals your institution wants to manually review. "
+                "Saved to `data/custom_watchlist.csv`."
+            )
+            st.info(
+                "Why this helps: public registries are useful but never complete. "
+                "A custom watchlist adds your local policy context, helps catch known concerns early, "
+                "and reduces false confidence when something is simply not found in a registry."
+            )
+
+            starter_labels = {
+                entry["name"]: f"{entry['name']} ({entry['risk_level']})"
+                for entry in STARTER_WATCHLIST
+            }
+            selected_starters = st.multiselect(
+                "Starter entries from current research scan",
+                options=[entry["name"] for entry in STARTER_WATCHLIST],
+                format_func=lambda name: starter_labels.get(name, name),
+                key="starter_watchlist_selection",
+            )
+            if st.button("Add selected starters", key="add_starter_watchlist"):
+                starter_rows = [
+                    {**entry, "entry_id": _watchlist_entry_id(entry["name"], entry["url_domain"])}
+                    for entry in STARTER_WATCHLIST
+                    if entry["name"] in selected_starters
+                ]
+                updated_df, added_count = _append_watchlist_rows(custom_watchlist_df, starter_rows)
+                if added_count:
+                    _save_custom_watchlist_df(updated_df)
+                    st.session_state.custom_watchlist_df = updated_df
+                    custom_watchlist_df = updated_df
+                    st.success(f"Added {added_count} starter entr{'y' if added_count == 1 else 'ies'}.")
+                else:
+                    st.info("No new starter entries were added.")
+
+            with st.form("manual_watchlist_form", clear_on_submit=True):
+                watch_name = st.text_input("Publisher or journal name")
+                watch_domain = st.text_input("Domain (optional)")
+                watch_concern = st.selectbox(
+                    "Concern level",
+                    options=["Medium", "High", "Low"],
+                    index=0,
+                )
+                watch_note = st.text_input("Short note (optional)")
+                watch_source = st.text_input("Source label (optional)", value="Institution watchlist")
+                watch_source_url = st.text_input("Source URL (optional)")
+                add_manual = st.form_submit_button("Add custom entry")
+
+            if add_manual:
+                manual_row = {
+                    "name": watch_name.strip(),
+                    "type": "publisher",
+                    "url_domain": extract_domain(watch_domain) or "",
+                    "risk_level": watch_concern,
+                    "warning_summary": watch_note.strip(),
+                    "source": watch_source.strip() or "Institution watchlist",
+                    "source_url": watch_source_url.strip(),
+                    "entry_id": _watchlist_entry_id(watch_name.strip(), watch_domain.strip()),
+                }
+                updated_df, added_count = _append_watchlist_rows(custom_watchlist_df, [manual_row])
+                if added_count:
+                    _save_custom_watchlist_df(updated_df)
+                    st.session_state.custom_watchlist_df = updated_df
+                    custom_watchlist_df = updated_df
+                    st.success("Custom entry added.")
+                else:
+                    st.info("Entry was blank or already exists.")
+
+            if not custom_watchlist_df.empty:
+                st.caption(f"{len(custom_watchlist_df)} custom entr{'y' if len(custom_watchlist_df) == 1 else 'ies'} loaded.")
+                display_df = custom_watchlist_df[
+                    ["name", "url_domain", "risk_level", "warning_summary", "source"]
+                ].rename(
+                    columns={
+                        "name": "Name",
+                        "url_domain": "Domain",
+                        "risk_level": "Concern",
+                        "warning_summary": "Note",
+                        "source": "Source",
+                    }
+                )
+                st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+                removal_options = [
+                    f"{idx}|{_watchlist_display_label(custom_watchlist_df.iloc[idx])}"
+                    for idx in range(len(custom_watchlist_df))
+                ]
+                selected_remove = st.selectbox(
+                    "Remove entry",
+                    options=removal_options,
+                    index=0,
+                    key="watchlist_remove_selection",
+                )
+                if st.button("Remove selected entry", key="remove_watchlist_entry"):
+                    remove_idx = int(selected_remove.split("|", 1)[0])
+                    updated_df = custom_watchlist_df.drop(index=remove_idx).reset_index(drop=True)
+                    _save_custom_watchlist_df(updated_df)
+                    st.session_state.custom_watchlist_df = updated_df
+                    custom_watchlist_df = updated_df
+                    st.success("Entry removed.")
+            else:
+                st.info("No custom watchlist entries yet.")
+
         uploaded = st.file_uploader(
-            "Import from file",
+            "Upload TXT or CSV",
             type=["txt", "csv"],
-            help="TXT: one reference per line. CSV: choose separator and the correct column below.",
         )
 
         if uploaded is not None:
@@ -699,7 +1250,6 @@ def main() -> None:
                 separator_label = st.selectbox(
                     "CSV separator",
                     options=["Auto detect", "Comma (,)", "Semicolon (;)", "Tab", "Pipe (|)"],
-                    help="If parsing looks wrong, choose the delimiter manually.",
                 )
                 separator_map = {
                     "Auto detect": "auto",
@@ -720,13 +1270,12 @@ def main() -> None:
                         st.info("The uploaded CSV has no rows.")
                     else:
                         selected_column = st.selectbox(
-                            "Which column contains references?",
+                            "Reference column",
                             options=[str(column) for column in csv_df.columns],
-                            help="Choose the column that contains one reference per row.",
                         )
-                        st.caption("Preview (first 5 rows)")
+                        st.caption("Preview")
                         st.dataframe(csv_df.head(5), use_container_width=True, hide_index=True)
-                        if st.button("Load this column", key="load_csv_column"):
+                        if st.button("Load column", key="load_csv_column"):
                             try:
                                 uploaded_text = _extract_reference_text_from_upload(
                                     uploaded,
@@ -740,34 +1289,32 @@ def main() -> None:
             else:
                 preview_text = _decode_uploaded_text(uploaded.getvalue())
                 preview_lines = "\n".join(preview_text.splitlines()[:8]).strip()
-                st.caption("Text preview")
+                st.caption("Preview")
                 st.code(preview_lines or "(File is empty)", language="text")
-                if st.button("Load this text file", key="load_text_upload"):
+                if st.button("Load text", key="load_text_upload"):
                     st.session_state.reference_text = preview_text
                     st.session_state.analysis_ran = False
 
         simple_mode = st.toggle(
-            "Simple mode (recommended)",
+            "Standard matching",
             value=True,
-            help="Use default matching settings suitable for most users.",
+            help="Recommended for most reference lists.",
         )
 
         if simple_mode:
             fuzzy_threshold = 0.88
             max_fuzzy_matches = 3
-            st.caption("Using standard matching settings.")
         else:
-            st.caption("Use advanced settings only if results look too strict or too broad.")
+            st.caption("Adjust only if matching looks too broad or too strict.")
             fuzzy_threshold = st.slider(
                 "Match strictness",
                 min_value=0.7,
                 max_value=0.98,
                 value=0.88,
                 step=0.01,
-                help="Higher values are stricter and reduce possible false positives.",
             )
             max_fuzzy_matches = st.number_input(
-                "Maximum suggestions per reference",
+                "Suggestions per reference",
                 min_value=1,
                 max_value=10,
                 value=3,
@@ -775,13 +1322,15 @@ def main() -> None:
             )
 
         with st.form("analysis_form", clear_on_submit=False):
+            st.subheader("2. Run check")
+            st.caption("Use standard matching unless results look too broad or too strict.")
             reference_text = st.text_area(
                 "Reference list",
-                placeholder="Paste one full reference per line...",
+                placeholder="One full reference per line",
                 height=260,
                 key="reference_text",
             )
-            action = st.form_submit_button("Step 2: Run Check")
+            action = st.form_submit_button("Run check")
 
         if action:
             st.session_state.analysis_error = ""
@@ -789,24 +1338,31 @@ def main() -> None:
                 st.session_state.analysis_rows = []
                 st.session_state.analysis_pred_db_loaded = pred_db is not None
                 st.session_state.analysis_ran = True
-                st.session_state.analysis_notice = "Please paste references first."
+                st.session_state.analysis_notice = "Add at least one reference."
             else:
                 try:
-                    with st.status("Running reference checks...", expanded=True) as status_box:
-                        status_box.write("Step 1/3: Reading and parsing references")
+                    latest_custom_df = st.session_state.custom_watchlist_df
+                    latest_custom_db = (
+                        PredatoryDbProvider.from_csv_paths([custom_watchlist_path])
+                        if not latest_custom_df.empty and custom_watchlist_path.exists()
+                        else None
+                    )
+                    with st.status("Running checks...", expanded=True) as status_box:
+                        status_box.write("1/3 Reading references")
                         progress = st.progress(15)
-                        status_box.write("Step 2/3: Matching journals/publishers to registry data")
+                        status_box.write("2/3 Matching against registry data")
                         rows, pred_db_loaded = _build_rows(
                             reference_text,
                             fuzzy_threshold=float(fuzzy_threshold),
                             max_fuzzy_matches=int(max_fuzzy_matches),
                             pred_db=pred_db,
+                            custom_db=latest_custom_db,
                         )
                         progress.progress(75)
-                        status_box.write("Step 3/3: Building prioritized review table")
+                        status_box.write("3/3 Preparing results")
                         progress.progress(100)
                         status_box.update(
-                            label=f"Check complete: {len(rows)} references processed",
+                            label=f"Done: {len(rows)} references processed",
                             state="complete",
                             expanded=False,
                         )
@@ -816,10 +1372,10 @@ def main() -> None:
                     if rows:
                         st.session_state.analysis_notice = ""
                         if hasattr(st, "toast"):
-                            st.toast("Reference check complete.")
+                            st.toast("Check complete.")
                     else:
                         st.session_state.analysis_notice = (
-                            "No references were detected. Add one full reference per line."
+                            "No references found. Add one reference per line."
                         )
                 except Exception as exc:
                     st.session_state.analysis_rows = []
@@ -832,40 +1388,45 @@ def main() -> None:
 
     with right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("Step 3: Review Results")
-        st.caption("Use the recommended next step column first, then inspect details.")
-        if hasattr(st, "popover"):
-            with st.popover("Quick guide"):
-                st.markdown(
-                    "1. Start with `Needs attention` view.\n"
-                    "2. Open one reference in `Reference spotlight`.\n"
-                    "3. Resolve `Check immediately` first, then `Check manually`.\n"
-                    "4. Export CSV for records or sharing."
-                )
+        st.subheader("3. Review results")
+        st.caption("Start with items that need attention, then inspect details.")
+        st.markdown(
+            """
+            <div class="legend">
+              <div class="legend-item"><span class="legend-badge badge-immediate">❗ Check immediately</span><span>High-priority risk signal. Review first.</span></div>
+              <div class="legend-item"><span class="legend-badge badge-manual">⚠ Check manually</span><span>Possible concern. Verify before use.</span></div>
+              <div class="legend-item"><span class="legend-badge badge-details">🛠 Add missing details</span><span>Reference is incomplete and needs fixing.</span></div>
+              <div class="legend-item"><span class="legend-badge badge-ok">✓ Looks OK</span><span>No urgent warning found in this run.</span></div>
+              <div class="legend-item"><span class="legend-badge badge-flag">🏷 Registry/Watchlist flagged</span><span>Matched a loaded registry entry or your custom watchlist.</span></div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
         if not st.session_state.analysis_ran:
-            st.info("Run the check to see possible warnings and missing details.")
+            st.info("Run the check to view results.")
         elif st.session_state.analysis_error:
             st.error(f"Could not complete the check: {st.session_state.analysis_error}")
         else:
             rows = st.session_state.analysis_rows or []
             if not rows:
-                st.warning(st.session_state.analysis_notice or "No analysis output available yet.")
+                st.warning(st.session_state.analysis_notice or "No results available.")
             else:
                 if not st.session_state.analysis_pred_db_loaded:
                     st.warning(
-                        "Registry file not found. This run only checks reference completeness, not predatory registry matches."
+                        "Registry files were not found. Only reference completeness was checked."
                     )
 
                 df = pd.DataFrame(rows)
                 total = len(df)
                 matches = int((df["Registry warning"] == "Match").sum())
+                custom_matches = int((df["Custom watchlist warning"] == "Match").sum())
                 no_match = total - matches
                 needs_review = int(df["Recommended next step"].isin(["Check immediately", "Check manually"]).sum())
                 score_series = df["Match confidence"].fillna("").astype(str).str.rstrip("%")
                 avg_score = score_series.replace("", "0").astype(float).mean()
 
-                stats = st.columns(5)
+                stats = st.columns(6)
                 stats[0].markdown(
                     f"""
                     <div class="stat-card">
@@ -878,7 +1439,7 @@ def main() -> None:
                 stats[1].markdown(
                     f"""
                     <div class="stat-card">
-                      <div class="stat-label">Matches</div>
+                      <div class="stat-label">Registry-flagged</div>
                       <div class="stat-value">{matches}</div>
                     </div>
                     """,
@@ -887,13 +1448,22 @@ def main() -> None:
                 stats[2].markdown(
                     f"""
                     <div class="stat-card">
-                      <div class="stat-label">No Match</div>
-                      <div class="stat-value">{no_match}</div>
+                      <div class="stat-label">Watchlist-flagged</div>
+                      <div class="stat-value">{custom_matches}</div>
                     </div>
                     """,
                     unsafe_allow_html=True,
                 )
                 stats[3].markdown(
+                    f"""
+                    <div class="stat-card">
+                      <div class="stat-label">Not found</div>
+                      <div class="stat-value">{no_match}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+                stats[4].markdown(
                     f"""
                     <div class="stat-card">
                       <div class="stat-label">Needs review</div>
@@ -902,7 +1472,7 @@ def main() -> None:
                     """,
                     unsafe_allow_html=True,
                 )
-                stats[4].markdown(
+                stats[5].markdown(
                     f"""
                     <div class="stat-card">
                       <div class="stat-label">Avg. confidence</div>
@@ -911,53 +1481,61 @@ def main() -> None:
                     """,
                     unsafe_allow_html=True,
                 )
-                st.markdown(
-                    _chip(f"{needs_review} need attention", "warning")
-                    + _chip(f"{matches} registry matches", "neutral")
-                    + _chip(f"{no_match} no-match entries", "success"),
-                    unsafe_allow_html=True,
-                )
 
                 st.caption(
-                    "No match does not prove a journal is safe. It only means no match was found in the loaded registry file."
+                    "`Not found` means no matching entry was found in the loaded registry data."
                 )
-                with st.expander("How to interpret results", expanded=False):
-                    st.markdown(
-                        "1. Start with `Recommended next step`.\n"
-                        "2. If it says `Check immediately` or `Check manually`, review `Risk level`, `Registry note`, and links.\n"
-                        "3. If it says `Add missing details`, improve that reference before submission.\n"
-                        "4. Use `Norwegian registry search` for manual confirmation."
-                    )
 
                 view_name = _pick_view()
-                filtered_df = _filter_rows(df, view_name).reset_index(drop=True)
+                filtered_df = _sort_for_review(_filter_rows(df, view_name).reset_index(drop=True))
                 st.caption(f"Showing {len(filtered_df)} of {len(df)} references in this view.")
                 if filtered_df.empty:
                     st.info("No references match this filter. Try another quick view.")
-                    filtered_df = df.reset_index(drop=True)
+                    filtered_df = _sort_for_review(df.reset_index(drop=True))
+
+                display_columns = [
+                    "Reference",
+                    "Recommended next step",
+                    "Registry warning",
+                    "Custom watchlist warning",
+                    "Risk level",
+                    "Registry record",
+                    "Matched text",
+                    "Source URL",
+                    "Norwegian registry search",
+                ]
+                display_df = filtered_df[display_columns].copy()
+                display_df["Registry warning"] = display_df["Registry warning"].replace(
+                    {"Match": "Flagged", "No match": "Not found in loaded registry"}
+                )
+                display_df["Custom watchlist warning"] = display_df["Custom watchlist warning"].replace(
+                    {"Match": "Flagged", "No match": "Not found in custom watchlist"}
+                )
 
                 column_config = {
                     "Norwegian registry search": st.column_config.LinkColumn(
-                        "Norwegian registry search"
+                        "Search Norwegian register"
                     ),
                     "Source URL": st.column_config.LinkColumn("Source URL"),
+                    "Registry warning": st.column_config.TextColumn("Registry flag"),
+                    "Custom watchlist warning": st.column_config.TextColumn("Watchlist flag"),
                     "Recommended next step": st.column_config.TextColumn(
-                        "Recommended next step",
-                        help="Fastest way to prioritize what to review first.",
-                    ),
-                    "Reference check": st.column_config.TextColumn(
-                        "Reference check",
-                        help="Quick check for missing core details by reference type.",
+                        "What to do next",
                     ),
                 }
 
-                styled = (
-                    filtered_df.style.applymap(_style_match_status, subset=["Registry warning"])
-                    .applymap(_style_risk_level, subset=["Risk level"])
-                    .applymap(_style_norwegian_level, subset=["Norwegian level"])
-                    .applymap(_style_missing_fields, subset=["Reference check"])
-                    .applymap(_style_action, subset=["Recommended next step"])
-                )
+                styled = display_df.style
+                style_rules = [
+                    ("Registry warning", _style_match_status),
+                    ("Custom watchlist warning", _style_custom_status),
+                    ("Risk level", _style_risk_level),
+                    ("Norwegian level", _style_norwegian_level),
+                    ("Reference check", _style_missing_fields),
+                    ("Recommended next step", _style_action),
+                ]
+                for column_name, style_fn in style_rules:
+                    if column_name in display_df.columns:
+                        styled = styled.applymap(style_fn, subset=[column_name])
                 st.dataframe(
                     styled,
                     use_container_width=True,
@@ -966,15 +1544,14 @@ def main() -> None:
                 )
 
                 detail_options = [
-                    f"{idx + 1}. {_short_text(row['Reference'])}"
+                    _short_text(row["Reference"])
                     for idx, row in filtered_df.iterrows()
                 ]
                 if detail_options:
                     selected_option = st.selectbox(
-                        "Reference spotlight",
+                        "Inspect reference",
                         options=detail_options,
                         index=0,
-                        help="Pick one reference to inspect all details in one place.",
                     )
                     selected_idx = detail_options.index(selected_option)
                     selected_row = filtered_df.iloc[selected_idx]
@@ -988,24 +1565,36 @@ def main() -> None:
                     st.code(selected_row["Reference"], language="text")
                     details_cols = st.columns(2)
                     details_cols[0].markdown("**Registry record**")
-                    details_cols[0].write(selected_row["Registry record"] or "No registry match")
+                    details_cols[0].write(selected_row["Registry record"] or "Not found in loaded registry")
                     details_cols[1].markdown("**Reference check**")
                     details_cols[1].write(selected_row["Reference check"])
                     st.markdown("**Registry note**")
                     st.write(selected_row["Registry note"] or "No additional note")
                     st.markdown('</div>', unsafe_allow_html=True)
 
-                st.download_button(
-                    "Download results (CSV)",
-                    data=df.to_csv(index=False).encode("utf-8"),
-                    file_name="reference_check_results.csv",
-                    mime="text/csv",
-                )
+                full_export_df = _sort_for_review(df.reset_index(drop=True))
+                csv_data = full_export_df.to_csv(index=False).encode("utf-8")
+                excel_data = _build_excel_bytes(full_export_df)
+                download_cols = st.columns(2)
+                with download_cols[0]:
+                    st.download_button(
+                        "Download CSV",
+                        data=csv_data,
+                        file_name="reference_check_results.csv",
+                        mime="text/csv",
+                    )
+                with download_cols[1]:
+                    st.download_button(
+                        "Download Excel (.xlsx)",
+                        data=excel_data,
+                        file_name="reference_check_results.xlsx",
+                        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    )
 
         st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown(
-        '<p class="footer-note">Tip: keep registry files (`predatory_db_v7_with_norwegian_levels.csv`, `pred_pub_list.csv`, and `pred_jour_list.csv`) up to date for the most complete matching.</p>',
+        '<p class="footer-note">Keep registry files updated for the most complete matching.</p>',
         unsafe_allow_html=True,
     )
 

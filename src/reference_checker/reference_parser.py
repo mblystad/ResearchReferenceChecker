@@ -17,6 +17,7 @@ class ReferenceListParser:
     VOLUME_ISSUE_PATTERN = re.compile(r"(\d+)\s*\((\d+)\)")
     CONFERENCE_PATTERN = re.compile(r"(proceedings of|conference on|conference|symposium|workshop)(.+)", re.IGNORECASE)
     PREPRINT_PATTERN = re.compile(r"\b(arxiv|biorxiv|medrxiv|ssrn|research square)\b", re.IGNORECASE)
+    RESOURCE_TAG_PATTERN = re.compile(r"\s*\[(google scholar|crossref|pubmed)\]", re.IGNORECASE)
     APA_TITLE_JOURNAL_PATTERN = re.compile(
         r"\(\s*(?P<year>(19|20)\d{2})\s*\)\.\s*(?P<title>.+?)\.\s*(?P<journal>[^,]+)",
         re.IGNORECASE,
@@ -27,21 +28,22 @@ class ReferenceListParser:
         entries: List[ReferenceEntry] = []
         for line in lines:
             index_label, content = self._split_index(line)
+            clean_content = self._clean_reference_content(content)
             entry = ReferenceEntry(
                 raw_text=line,
                 index_label=index_label,
-                authors=self._extract_authors(content),
-                title=self._extract_title(content),
-                journal=self._extract_journal(content),
-                year=self._extract_year(content),
-                volume=self._extract_volume(content),
-                issue=self._extract_issue(content),
-                pages=self._extract_pages(content),
-                doi=self._extract_doi(content),
-                url=self._extract_url(content),
-                publisher=self._extract_publisher(content),
-                conference_name=self._extract_conference(content),
-                preprint_server=self._extract_preprint_server(content),
+                authors=self._extract_authors(clean_content),
+                title=self._extract_title(clean_content),
+                journal=self._extract_journal(clean_content),
+                year=self._extract_year(clean_content),
+                volume=self._extract_volume(clean_content),
+                issue=self._extract_issue(clean_content),
+                pages=self._extract_pages(clean_content),
+                doi=self._extract_doi(clean_content),
+                url=self._extract_url(clean_content),
+                publisher=self._extract_publisher(clean_content),
+                conference_name=self._extract_conference(clean_content),
+                preprint_server=self._extract_preprint_server(clean_content),
             )
             if entry.title and self._looks_like_dataset(entry):
                 entry.dataset_name = entry.title
@@ -93,12 +95,22 @@ class ReferenceListParser:
         segments = self._sentence_segments(content)
         if len(segments) < 3:
             return None
+        journal_parts: List[str] = []
         for seg in segments[2:]:
-            if self._extract_year(seg):
+            seg_clean = seg.strip().strip(";,")
+            if not seg_clean:
+                continue
+            if self._extract_year(seg_clean):
                 break
-            if seg.lower().startswith("available from"):
+            seg_lower = seg_clean.lower()
+            if seg_lower.startswith("available from"):
                 break
-            return seg
+            if seg_lower.startswith("http://") or seg_lower.startswith("https://") or seg_lower.startswith("doi:"):
+                break
+            journal_parts.append(seg_clean)
+
+        if journal_parts:
+            return ". ".join(journal_parts).strip(" .,;:")
         return None
 
     def _extract_volume(self, content: str) -> str | None:
@@ -179,3 +191,8 @@ class ReferenceListParser:
 
     def _sentence_segments(self, content: str) -> List[str]:
         return [seg.strip().rstrip(".") for seg in re.split(r"\.\s+", content) if seg.strip()]
+
+    def _clean_reference_content(self, content: str) -> str:
+        cleaned = self.RESOURCE_TAG_PATTERN.sub("", content or "")
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        return cleaned

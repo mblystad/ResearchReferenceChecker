@@ -79,3 +79,63 @@ def test_default_csv_paths_include_journal_registry(tmp_path: Path):
     paths = _default_csv_paths(base_dir=tmp_path)
 
     assert journal_list_path in paths
+
+
+def test_raw_text_name_scan_catches_publisher_without_structured_fields(tmp_path: Path):
+    csv_path = tmp_path / "custom_watchlist.csv"
+    csv_path.write_text(
+        "name,type,url_domain,risk_level\n"
+        "Springer,publisher,,Medium\n",
+        encoding="utf-8",
+    )
+
+    provider = PredatoryDbProvider.from_csv_paths([csv_path])
+    reference = ReferenceEntry(
+        raw_text=(
+            "Hastie, T., Tibshirani, R., & Friedman, J. (2009). The elements of statistical learning. "
+            "Springer. https://doi.org/10.1007/978-0-387-84858-7"
+        ),
+    )
+
+    default_matches = provider.match_reference(reference, fuzzy=True)
+    text_scan_matches = provider.match_reference(reference, fuzzy=True, scan_raw_text=True)
+
+    assert not default_matches
+    assert text_scan_matches
+    assert any(m.record.name == "Springer" and m.basis == "text-name" for m in text_scan_matches)
+
+
+def test_single_letter_registry_rows_are_ignored_in_simple_lists(tmp_path: Path):
+    csv_path = tmp_path / JOURNAL_REGISTRY_FILENAME
+    csv_path.write_text(
+        "1,C\n"
+        "2,Example Predatory Journal\n"
+        "3,J\n",
+        encoding="utf-8",
+    )
+    provider = PredatoryDbProvider.from_csv_paths([csv_path])
+
+    reference = ReferenceEntry(
+        raw_text="Smith A. Title. J. 2024.",
+        journal="J",
+    )
+    matches = provider.match_reference(reference)
+
+    assert not matches
+
+
+def test_single_letter_name_not_indexed_from_standard_csv(tmp_path: Path):
+    csv_path = tmp_path / "custom_watchlist.csv"
+    csv_path.write_text(
+        "name,type,url_domain,risk_level\n"
+        "J,journal,,High\n"
+        "Nature,journal,,Medium\n",
+        encoding="utf-8",
+    )
+    provider = PredatoryDbProvider.from_csv_paths([csv_path])
+
+    bad_reference = ReferenceEntry(raw_text="J.", journal="J")
+    good_reference = ReferenceEntry(raw_text="Nature article.", journal="Nature")
+
+    assert not provider.match_reference(bad_reference)
+    assert provider.match_reference(good_reference)
