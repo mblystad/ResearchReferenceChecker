@@ -8,9 +8,16 @@ import sys
 import csv
 from difflib import SequenceMatcher
 
+from .journal_abbreviations import (
+    ABBR_JSON_FILENAME,
+    ABBR_SQLITE_FILENAME,
+    abbreviation_candidates,
+    load_abbreviation_index,
+)
 from .models import ReferenceEntry, ValidationIssue
 from .normalization import extract_domain, iter_domain_candidates, normalize_text
 
+ENRICHED_PRIMARY_REGISTRY_FILENAME = "predatory_db_v7_with_norwegian_levels_enriched.csv"
 PRIMARY_REGISTRY_FILENAME = "predatory_db_v7_with_norwegian_levels.csv"
 PUBLISHER_REGISTRY_FILENAME = "pred_pub_list.csv"
 JOURNAL_REGISTRY_FILENAME = "pred_jour_list.csv"
@@ -44,6 +51,8 @@ class PredatoryDbMatch:
     basis: str
     matched_value: str
     score: float | None = None
+    expanded_title: str | None = None
+    abbreviation_candidates: tuple[str, ...] = ()
 
 
 _DEFAULT_PROVIDER: "PredatoryDbProvider | None" = None
@@ -57,13 +66,20 @@ class PredatoryDbProvider:
         records: List[PredatoryDbRecord],
         name_index: Dict[str, List[PredatoryDbRecord]],
         domain_index: Dict[str, List[PredatoryDbRecord]],
+        abbreviation_index: Dict[str, List[str]] | None = None,
     ) -> None:
         self.records = records
         self._name_index = name_index
         self._domain_index = domain_index
+        self._abbreviation_index = abbreviation_index or {}
 
     @classmethod
-    def from_csv_paths(cls, paths: Iterable[Path]) -> "PredatoryDbProvider":
+    def from_csv_paths(
+        cls,
+        paths: Iterable[Path],
+        *,
+        abbreviation_paths: Iterable[Path] | None = None,
+    ) -> "PredatoryDbProvider":
         records: Dict[str, PredatoryDbRecord] = {}
         name_index: Dict[str, List[PredatoryDbRecord]] = {}
         domain_index: Dict[str, List[PredatoryDbRecord]] = {}
@@ -78,7 +94,13 @@ class PredatoryDbProvider:
                 records[record_key] = record
                 _index_record(record, row, name_index, domain_index)
 
-        return cls(list(records.values()), name_index, domain_index)
+        abbreviation_index = load_abbreviation_index(abbreviation_paths or [])
+        return cls(
+            list(records.values()),
+            name_index,
+            domain_index,
+            abbreviation_index=abbreviation_index,
+        )
 
     @classmethod
     def load_default(cls, base_dir: Path | None = None) -> "PredatoryDbProvider | None":
@@ -88,8 +110,14 @@ class PredatoryDbProvider:
         paths = _default_csv_paths(base_dir)
         if not paths:
             return None
-        _DEFAULT_PROVIDER = cls.from_csv_paths(paths)
+        _DEFAULT_PROVIDER = cls.from_csv_paths(
+            paths,
+            abbreviation_paths=_default_abbreviation_paths(base_dir),
+        )
         return _DEFAULT_PROVIDER
+
+    def abbreviation_candidates(self, value: str | None, *, limit: int = 15) -> List[str]:
+        return abbreviation_candidates(self._abbreviation_index, value, limit=limit)
 
     def check_reference(self, reference: ReferenceEntry) -> List[ValidationIssue]:
         matches = self.match_reference(reference)
@@ -118,11 +146,25 @@ class PredatoryDbProvider:
         fuzzy_threshold: float = 0.88,
         max_fuzzy_matches: int = 3,
         fuzzy_token_threshold: float = 0.8,
+        abbreviation_limit: int = 15,
+        abbreviation_fuzzy_limit: int = 5,
     ) -> List[PredatoryDbMatch]:
         matches: List[PredatoryDbMatch] = []
         name_candidates: list[tuple[str, set[str]]] = []
         if reference.journal:
             name_candidates.append((reference.journal, {"journal", "publisher"}))
+            matches.extend(
+                self._match_abbreviation(
+                    reference.journal,
+                    expected_types={"journal", "publisher"},
+                    max_candidates=abbreviation_limit,
+                    fuzzy=fuzzy,
+                    fuzzy_threshold=fuzzy_threshold,
+                    max_fuzzy_matches=max_fuzzy_matches,
+                    fuzzy_token_threshold=fuzzy_token_threshold,
+                    max_fuzzy_expansions=abbreviation_fuzzy_limit,
+                )
+            )
         if reference.publisher:
             name_candidates.append((reference.publisher, {"publisher"}))
         if fuzzy and not name_candidates and reference.raw_text:
@@ -239,6 +281,73 @@ class PredatoryDbProvider:
                             score=1.0,
                         )
                     )
+        return matches
+
+    def _match_abbreviation(
+        self,
+        name: str,
+        *,
+        expected_types: set[str],
+        max_candidates: int,
+        fuzzy: bool,
+        fuzzy_threshold: float,
+        max_fuzzy_matches: int,
+        fuzzy_token_threshold: float,
+        max_fuzzy_expansions: int,
+    ) -> List[PredatoryDbMatch]:
+        normalized = normalize_text(name)
+        if not normalized or len(normalized) <= 1:
+            return []
+        candidates = self._abbreviation_index.get(normalized, [])
+        if not candidates:
+            return []
+
+        capped = list(candidates[:max_candidates]) if max_candidates > 0 else list(candidates)
+        candidate_tuple = tuple(capped)
+        matches: List[PredatoryDbMatch] = []
+
+        for full_title in capped:
+            title_norm = normalize_text(full_title)
+            if not title_norm:
+                continue
+            records = self._name_index.get(title_norm, [])
+            for record in records:
+                if record.entry_type in expected_types:
+                    matches.append(
+                        PredatoryDbMatch(
+                            record=record,
+                            basis="abbrev-name",
+                            matched_value=name,
+                            score=0.99,
+                            expanded_title=full_title,
+                            abbreviation_candidates=candidate_tuple,
+                        )
+                    )
+
+        if matches or not fuzzy:
+            return matches
+
+        fuzzy_cap = max(0, min(max_fuzzy_expansions, len(capped)))
+        for full_title in capped[:fuzzy_cap]:
+            fuzzy_matches = self._match_name_fuzzy(
+                full_title,
+                expected_types=expected_types,
+                threshold=fuzzy_threshold,
+                max_matches=max_fuzzy_matches,
+                token_threshold=fuzzy_token_threshold,
+            )
+            for fuzzy_match in fuzzy_matches:
+                matches.append(
+                    PredatoryDbMatch(
+                        record=fuzzy_match.record,
+                        basis="abbrev-fuzzy-name",
+                        matched_value=name,
+                        score=fuzzy_match.score,
+                        expanded_title=full_title,
+                        abbreviation_candidates=candidate_tuple,
+                    )
+                )
+
         return matches
 
     def _match_name_in_text(
@@ -433,6 +542,10 @@ def _build_match_message(match: PredatoryDbMatch) -> str:
     ]
     if match.score is not None and match.basis.startswith("fuzzy"):
         parts.append(f"similarity={match.score:.2f}")
+    if match.expanded_title:
+        parts.append(f"expanded={match.expanded_title}")
+    if len(match.abbreviation_candidates) > 1:
+        parts.append(f"abbrev-candidates={len(match.abbreviation_candidates)}")
     if summary:
         parts.append(summary)
     link_summary = _format_links(record.manual_links)
@@ -485,10 +598,39 @@ def _default_csv_paths(base_dir: Path | None = None) -> List[Path]:
     roots.extend([Path.cwd(), Path(__file__).resolve().parents[2]])
 
     filenames = [
+        ENRICHED_PRIMARY_REGISTRY_FILENAME,
         PRIMARY_REGISTRY_FILENAME,
         PUBLISHER_REGISTRY_FILENAME,
         JOURNAL_REGISTRY_FILENAME,
     ]
+    candidates: List[Path] = []
+    for root in roots:
+        for filename in filenames:
+            direct = root / filename
+            if direct.exists():
+                candidates.append(direct)
+            data_path = root / "data" / filename
+            if data_path.exists():
+                candidates.append(data_path)
+
+    unique: List[Path] = []
+    seen = set()
+    for path in candidates:
+        if path in seen:
+            continue
+        seen.add(path)
+        unique.append(path)
+    return unique
+
+
+def _default_abbreviation_paths(base_dir: Path | None = None) -> List[Path]:
+    roots: List[Path] = []
+    if base_dir:
+        roots.append(base_dir)
+    roots.extend(_bundle_roots())
+    roots.extend([Path.cwd(), Path(__file__).resolve().parents[2]])
+
+    filenames = [ABBR_JSON_FILENAME, ABBR_SQLITE_FILENAME]
     candidates: List[Path] = []
     for root in roots:
         for filename in filenames:

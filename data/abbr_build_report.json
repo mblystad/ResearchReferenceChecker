@@ -1,0 +1,598 @@
+{
+  "generated_at_utc": "2026-03-05T12:50:50.803737+00:00",
+  "sources": {
+    "csl_ncbi": "https://raw.githubusercontent.com/citation-style-language/abbreviations/master/ncbi/json/ncbi-abbreviations.json",
+    "combined_terms": "https://raw.githubusercontent.com/dcsuka/Journal_Abbreviations/master/Combined_Terms.txt"
+  },
+  "source_mapping_counts": {
+    "combined_terms": 118246,
+    "csl_ncbi": 37532
+  },
+  "source_rejected_rows": {
+    "combined_terms": 10,
+    "csl_ncbi": 336
+  },
+  "abbreviation_key_count": 42534,
+  "full_title_key_count": 53427,
+  "collision_key_count": 17620,
+  "largest_collisions": [
+    {
+      "abbr_norm": "biochim biophys acta",
+      "candidate_count": 23,
+      "candidates": [
+        "Biochimica et biophysica acta",
+        "Biochimica et Biophysica Acta Bioenergetics",
+        "Biochimica et Biophysica Acta Biomembranes",
+        "Biochimica et Biophysica Acta Gene Regulatory Mechanisms",
+        "Biochimica et Biophysica Acta Gene Structure and Expression",
+        "Biochimica et Biophysica Acta Lipids and Lipid Metabolism",
+        "Biochimica et Biophysica Acta Molecular and Cell Biology of Lipids",
+        "Biochimica et Biophysica Acta Molecular Cell Research",
+        "Biochimica et Biophysica Acta Protein Structure and Molecular Enzymology",
+        "Biochimica et Biophysica Acta Proteins and Proteomics"
+      ]
+    },
+    {
+      "abbr_norm": "appl physiol nutr metab",
+      "candidate_count": 7,
+      "candidates": [
+        "Applied physiology, nutrition, and metabolism = Physiologie appliquée, nutrition et métabolisme",
+        "Applied Physiology Nutrition and Metabolism",
+        "Applied physiology nutrition and metabolism = Physiologie appliquee nutrition et metabolisme",
+        "Applied Physiology Nutrition and Metabolism Physiologie Appliquée Nutrition et Métabolisme",
+        "Applied Physiology, Nutrition, and Metabolism",
+        "Applied physiology, nutrition, and metabolism = Physiologie appliquee, nutrition et metabolisme",
+        "Applied Physiology, Nutrition, and Metabolism. Physiologie Appliquée, Nutrition et Métabolisme"
+      ]
+    },
+    {
+      "abbr_norm": "rev elev med vet pays trop",
+      "candidate_count": 7,
+      "candidates": [
+        "Revue d'élevage et de médecine vétérinaire des pays tropicaux",
+        "Revue d'elevage et de medecine veterinaire des pays tropicaux",
+        "Revue d'Élevage et de Médecine Vétérinaire des Pays Tropicaux",
+        "Revue de l'Elevage et de Medecine Veterinaire des Pays Tropicaux",
+        "Revue de lElevage et de Medecine Veterinaire des Pays Tropicaux",
+        "Revue delevage et de medecine veterinaire des pays tropicaux",
+        "Revue dÉlevage et de Médecine Vétérinaire des Pays Tropicaux"
+      ]
+    },
+    {
+      "abbr_norm": "schriftenr ver wasser boden lufthyg",
+      "candidate_count": 7,
+      "candidates": [
+        "Schriftenreihe des Vereins für Wasser-, Boden- und Lufthygiene",
+        "Schriftenreihe des Vereins fuer Wasser Boden und Lufthygiene",
+        "Schriftenreihe des Vereins fuer Wasser-, Boden- und Lufthygiene",
+        "Schriftenreihe des Vereins fur Wasser Boden und Lufthygiene",
+        "Schriftenreihe des Vereins für Wasser Boden und Lufthygiene",
+        "Schriftenreihe des Vereins fur Wasser-, Boden- und Lufthygiene",
+        "Schriftenreihe des Vereins für Wasser-, Boden-, und Lufthygiene"
+      ]
+    },
+    {
+      "abbr_norm": "ann allergy asthma immunol",
+      "candidate_count": 6,
+      "candidates": [
+        "Annals of allergy, asthma & immunology : official publication of the American College of Allergy, Asthma, & Immunology",
+        "Annals of Allergy Asthma Immunology",
+        "Annals of allergy asthma immunology official publication of the American College of Allergy Asthma Immunology",
+        "Annals of Allergy Asthma and Immunology",
+        "Annals of Allergy, Asthma & Immunology",
+        "Annals of Allergy, Asthma, and Immunology"
+      ]
+    },
+    {
+      "abbr_norm": "behav res methods instrum comput",
+      "candidate_count": 6,
+      "candidates": [
+        "Behavior research methods, instruments, & computers : a journal of the Psychonomic Society, Inc",
+        "Behavior Research Methods Instruments Computers",
+        "Behavior research methods instruments computers a journal of the Psychonomic Society Inc",
+        "Behavior Research Methods Instruments and Computers",
+        "Behavior Research Methods, Instruments and Computers",
+        "Behavior Research Methods, Instruments, & Computers"
+      ]
+    },
+    {
+      "abbr_norm": "cancer epidemiol biomarkers prev",
+      "candidate_count": 6,
+      "candidates": [
+        "Cancer epidemiology, biomarkers & prevention : a publication of the American Association for Cancer Research, cosponsored by the American Society of Preventive Oncology",
+        "Cancer Epidemiology Biomarkers Prevention",
+        "Cancer epidemiology biomarkers prevention a publication of the American Association for Cancer Research cosponsored by the American Society of Preventive Oncology",
+        "Cancer Epidemiology Biomarkers and Prevention",
+        "Cancer Epidemiology, Biomarkers & Prevention",
+        "Cancer Epidemiology, Biomarkers and Prevention"
+      ]
+    },
+    {
+      "abbr_norm": "comp biochem physiol c toxicol pharmacol",
+      "candidate_count": 6,
+      "candidates": [
+        "Comparative biochemistry and physiology. Toxicology & pharmacology : CBP",
+        "Comparative Biochemistry and Physiology Part C Toxicology Pharmacology",
+        "Comparative Biochemistry and Physiology Toxicology Pharmacology",
+        "Comparative biochemistry and physiology Toxicology pharmacology CBP",
+        "Comparative Biochemistry and Physiology, Part C: Toxicology & Pharmacology",
+        "Comparative Biochemistry and Physiology: Toxicology & Pharmacology"
+      ]
+    },
+    {
+      "abbr_norm": "growth dev aging",
+      "candidate_count": 6,
+      "candidates": [
+        "Growth, development, and aging : GDA",
+        "Growth Development Aging",
+        "Growth Development and Aging",
+        "Growth development and aging GDA",
+        "Growth, Development & Aging",
+        "Growth, Development, and Aging"
+      ]
+    },
+    {
+      "abbr_norm": "in vitro cell dev biol anim",
+      "candidate_count": 6,
+      "candidates": [
+        "In vitro cellular & developmental biology. Animal",
+        "In Vitro Cellular Developmental Biology Animal",
+        "In vitro cellular developmental biology Animal",
+        "In Vitro Cellular & Developmental Biology - Animal",
+        "In Vitro Cellular and Developmental Biology Animal",
+        "In Vitro Cellular and Developmental Biology: Animal"
+      ]
+    },
+    {
+      "abbr_norm": "j fr otorhinolaryngol audiophonol chir maxillofac",
+      "candidate_count": 6,
+      "candidates": [
+        "Journal français d'oto-rhino-laryngologie, audio-phonologie et chirurgie maxillo-faciale",
+        "Journal français d'oto-rhino-laryngologie; audiophonologie, chirurgie maxillo-faciale",
+        "Journal Français d'Oto-Rhino-Laryngologie, Audio-Phonologie et Chirurgie Maxillo-Faciale",
+        "Journal francais d'oto-rhino-laryngologie; audiophonologie, chirurgie maxillo-faciale",
+        "Journal francais dotorhinolaryngologie audiophonologie chirurgie maxillofaciale",
+        "Journal Français dOtoRhinoLaryngologie AudioPhonologie et Chirurgie MaxilloFaciale"
+      ]
+    },
+    {
+      "abbr_norm": "j law med ethics",
+      "candidate_count": 6,
+      "candidates": [
+        "The Journal of law, medicine & ethics : a journal of the American Society of Law, Medicine & Ethics",
+        "Journal of Law Medicine Ethics",
+        "Journal of Law Medicine and Ethics",
+        "Journal of Law, Medicine & Ethics",
+        "Journal of Law, Medicine and Ethics",
+        "The Journal of law medicine ethics a journal of the American Society of Law Medicine Ethics"
+      ]
+    },
+    {
+      "abbr_norm": "j microbiol immunol infect",
+      "candidate_count": 6,
+      "candidates": [
+        "Journal of microbiology, immunology, and infection = Wei mian yu gan ran za zhi",
+        "Journal of Microbiology Immunology and Infection",
+        "Journal of microbiology immunology and infection = Wei mian yu gan ran za zhi",
+        "Journal of Microbiology Immunology and Infection Wei Mian Yu Gan Ran Za Zhi",
+        "Journal of Microbiology, Immunology and Infection",
+        "Journal of Microbiology, Immunology, and Infection. Wei Mian Yu Gan Ran Za Zhi"
+      ]
+    },
+    {
+      "abbr_norm": "j coll physicians surg pak",
+      "candidate_count": 6,
+      "candidates": [
+        "Journal of the College of Physicians and Surgeons--Pakistan : JCPSP",
+        "Journal of the College of Physicians and Surgeons Pakistan",
+        "Journal of the College of Physicians and Surgeons--Pakistan",
+        "Journal of the College of Physicians and Surgeons, Pakistan",
+        "Journal of the College of Physicians and SurgeonsPakistan",
+        "Journal of the College of Physicians and SurgeonsPakistan JCPSP"
+      ]
+    },
+    {
+      "abbr_norm": "nephrol dial transplant",
+      "candidate_count": 6,
+      "candidates": [
+        "Nephrology, dialysis, transplantation : official publication of the European Dialysis and Transplant Association - European Renal Association",
+        "Nephrology Dialysis and Transplantation",
+        "Nephrology Dialysis Transplantation",
+        "Nephrology dialysis transplantation official publication of the European Dialysis and Transplant Association European Renal Association",
+        "Nephrology, Dialysis and Transplantation",
+        "Nephrology, Dialysis, Transplantation"
+      ]
+    },
+    {
+      "abbr_norm": "rev ig bacteriol virusol parazitol epidemiol pneumoftiziol bacteriol virusol parazitol epidemiol",
+      "candidate_count": 6,
+      "candidates": [
+        "Revista de igienă, bacteriologie, virusologie, parazitologie, epidemiologie, pneumoftiziologie. Bacteriologia, virusologia, parazitologia, epidemiologia",
+        "Revista de Igienă Bacteriologie Virusologie Parazitologie Epidemiologie Pneumoftiziologie",
+        "Revista de igiena bacteriologie virusologie parazitologie epidemiologie pneumoftiziologie Bacteriologia virusologia parazitologia epidemiologia",
+        "Revista de Igienă, Bacteriologie, Virusologie, Parazitologie, Epidemiologie, Pneumoftiziologie",
+        "Revista de Igiena, Bacteriologie, Virusologie, Parazitologie, Epidemiologie, Pneumoftiziologie: Bacteriologia, Virusologia, Parazitologia, Epidemiologia",
+        "Revista de igiena, bacteriologie, virusologie, parazitologie, epidemiologie, pneumoftiziologie. Bacteriologia, virusologia, parazitologia, epidemiologia"
+      ]
+    },
+    {
+      "abbr_norm": "rocz akad med bialymst",
+      "candidate_count": 6,
+      "candidates": [
+        "Roczniki Akademii Medycznej w Białymstoku (1995)",
+        "Roczniki Akademii Medycznej w Białymstoku = Annales Academiae Medicae Bialostocensis",
+        "Roczniki Akademii Medycznej w Bialymstoku",
+        "Roczniki Akademii Medycznej w Bialymstoku (1995)",
+        "Roczniki Akademii Medycznej w Bialymstoku Annales Academiae Medicae Bialostocensis",
+        "Roczniki Akademii Medycznej w Bialymstoku. Annales Academiae Medicae Bialostocensis"
+      ]
+    },
+    {
+      "abbr_norm": "vital health stat 14",
+      "candidate_count": 6,
+      "candidates": [
+        "Vital and health statistics. Series 14, Data on national health resources",
+        "Vital & health statistics. Series 14, Data from the national health survey",
+        "Vital & health statistics. Series 14, Data from the national inventory of family planning services",
+        "Vital health statistics Series 14 Data from the national inventory of family planning services",
+        "Vital and Health Statistics Series 14 Data from the National Health Survey",
+        "Vital and Health Statistics. Series 14: Data from the National Health Survey"
+      ]
+    },
+    {
+      "abbr_norm": "z naturforsch b",
+      "candidate_count": 6,
+      "candidates": [
+        "Zeitschrift für Naturforschung. Teil B. Anorganische Chemie, organische Chemie, Biochemie, Biophysik, Biologie",
+        "Zeitschrift für Naturforschung. Teil B, Chemie, Biochemie, Biophysik, Biologie und verwandte Gebiete",
+        "Zeitschrift fur Naturforschung Teil B Chemie Biochemie Biophysik Biologie und verwandte Gebiete",
+        "Zeitschrift für Naturforschung Teil B Chemie Biochemie Biophysik Biologie und Verwandte Gebiete",
+        "Zeitschrift fur Naturforschung. Teil B, Chemie, Biochemie, Biophysik, Biologie und verwandte Gebiete",
+        "Zeitschrift für Naturforschung. Teil B: Chemie, Biochemie, Biophysik, Biologie und Verwandte Gebiete"
+      ]
+    },
+    {
+      "abbr_norm": "zentralbl bakteriol",
+      "candidate_count": 6,
+      "candidates": [
+        "Zentralblatt für Bakteriologie : international journal of medical microbiology",
+        "Zentralblatt fuer Bakteriologie",
+        "Zentralblatt fur Bakteriologie international journal of medical microbiology",
+        "Zentralblatt fur Bakteriologie : international journal of medical microbiology",
+        "Zentralblatt für Bakteriologie International Journal of Medical Microbiology",
+        "Zentralblatt für Bakteriologie: International Journal of Medical Microbiology"
+      ]
+    },
+    {
+      "abbr_norm": "zentralbl bakteriol mikrobiol hyg a",
+      "candidate_count": 6,
+      "candidates": [
+        "Zentralblatt für Bakteriologie, Mikrobiologie und Hygiene. 1. Abt. Originale A, Medizinische Mikrobiologie, Infektionskrankheiten und Parasitologie = International journal of microbiology and hygiene. A, Medical microbiology, infectiousdiseases, parasitology",
+        "Zentralblatt für Bakteriologie, Mikrobiologie, und Hygiene. Series A, Medical microbiology, infectious diseases, virology, parasitology",
+        "Zentralblatt fur Bakteriologie Mikrobiologie und Hygiene Series A Medical microbiology infectious diseases virology parasitology",
+        "Zentralblatt für Bakteriologie Mikrobiologie und Hygiene Series A Medical Microbiology Infectious Diseases Virology Parasitology",
+        "Zentralblatt fur Bakteriologie, Mikrobiologie, und Hygiene. Series A, Medical microbiology, infectious diseases, virology, parasitology",
+        "Zentralblatt für Bakteriologie, Mikrobiologie, und Hygiene. Series A: Medical Microbiology, Infectious Diseases, Virology, Parasitology"
+      ]
+    },
+    {
+      "abbr_norm": "acta belg med phys",
+      "candidate_count": 5,
+      "candidates": [
+        "Acta Belgica. Medica physica : organe officiel de la Société royale belge de médecine physique et de réhabilitation",
+        "Acta Belgica Medica Physica",
+        "Acta Belgica Medica physica organe officiel de la Societe royale belge de medecine physique et de rehabilitation",
+        "Acta Belgica. Medica Physica",
+        "Acta Belgica. Medica physica : organe officiel de la Societe royale belge de medecine physique et de rehabilitation"
+      ]
+    },
+    {
+      "abbr_norm": "acta biomed ateneo parmense",
+      "candidate_count": 5,
+      "candidates": [
+        "Acta bio-medica de L'Ateneo parmense : organo della Società di medicina e scienze naturali di Parma",
+        "Acta Bio-Medica de l'Ateneo Parmense",
+        "Acta bio-medica de L'Ateneo parmense : organo della Societa di medicina e scienze naturali di Parma",
+        "Acta BioMedica de lAteneo Parmense",
+        "Acta biomedica de LAteneo parmense organo della Societa di medicina e scienze naturali di Parma"
+      ]
+    },
+    {
+      "abbr_norm": "acta paediatr suppl",
+      "candidate_count": 5,
+      "candidates": [
+        "Acta paediatrica (Oslo, Norway : 1992). Supplement",
+        "Acta paediatrica. Supplementum",
+        "Acta paediatrica Supplement",
+        "Acta Paediatrica Supplement",
+        "Acta Paediatrica. Supplement"
+      ]
+    },
+    {
+      "abbr_norm": "acta physiol pharmacol ther latinoam",
+      "candidate_count": 5,
+      "candidates": [
+        "Acta physiologica, pharmacologica et therapeutica latinoamericana : órgano de la Asociación Latinoamericana de Ciencias Fisiológicas y [de] la Asociación Latinoamericana de Farmacología",
+        "Acta Physiologica Pharmacologica et Therapeutica Latinoamericana",
+        "Acta physiologica pharmacologica et therapeutica latinoamericana organo de la Asociacion Latinoamericana de Ciencias Fisiologicas y la Asociacion Latinoamericana de Farmacologia",
+        "Acta Physiologica, Pharmacologica et Therapeutica Latinoamericana",
+        "Acta physiologica, pharmacologica et therapeutica latinoamericana : organo de la Asociacion Latinoamericana de Ciencias Fisiologicas y [de] la Asociacion Latinoamericana de Farmacologia"
+      ]
+    },
+    {
+      "abbr_norm": "actas luso esp neurol psiquiatr cienc afines",
+      "candidate_count": 5,
+      "candidates": [
+        "Actas luso-españolas de neurología, psiquiatría y ciencias afines",
+        "Actas luso-espanolas de neurologia, psiquiatria y ciencias afines",
+        "Actas Luso-Españolas de Neurología, Psiquiatría y Ciencias Afines",
+        "Actas lusoespanolas de neurologia psiquiatria y ciencias afines",
+        "Actas LusoEspañolas de Neurología Psiquiatría y Ciencias Afines"
+      ]
+    },
+    {
+      "abbr_norm": "actas luso esp neurol psiquiatr",
+      "candidate_count": 5,
+      "candidates": [
+        "Actas luso-españolas de neurología y psiquiatría",
+        "Actas luso-espanolas de neurologia y psiquiatria",
+        "Actas Luso-Españolas de Neurología y Psiquiatría",
+        "Actas lusoespanolas de neurologia y psiquiatria",
+        "Actas LusoEspañolas de Neurología y Psiquiatría"
+      ]
+    },
+    {
+      "abbr_norm": "agapit",
+      "candidate_count": 5,
+      "candidates": [
+        "Ahapit : ukraïs'kyĭ istoryko-medychnyĭ zhurnal = Agapit : the Ukrainian historical and medical journal",
+        "Ahapit ukraiskyi istorykomedychnyi zhurnal = Agapit the Ukrainian historical and medical journal",
+        "Ahapit : ukrais'kyi istoryko-medychnyi zhurnal = Agapit : the Ukrainian historical and medical journal",
+        "Ahapit Ukraiskyi IstorykoMedychnyi Zhurnal Agapit The Ukrainian Historical and Medical Journal",
+        "Ahapit: Ukrais'kyi Istoryko-Medychnyi Zhurnal. Agapit: The Ukrainian Historical and Medical Journal"
+      ]
+    },
+    {
+      "abbr_norm": "al azhar med j",
+      "candidate_count": 5,
+      "candidates": [
+        "Al Azhar medical journal = Majallat al-Ṭibb al-Azhar",
+        "Al Azhar medical journal = Majallat al-Tibb al-Azhar",
+        "Al Azhar medical journal = Majallat alTibb alAzhar",
+        "Al Azhar Medical Journal Majallat AlTibb AlAzhar",
+        "Al Azhar Medical Journal. Majallat Al-Tibb Al-Azhar"
+      ]
+    },
+    {
+      "abbr_norm": "alafo",
+      "candidate_count": 5,
+      "candidates": [
+        "ALAFO; revista de la Asociación Latinoamericana de Facultades de Odontología",
+        "ALAFO Revista de la Asociación Latino Americana de Facultades de Odontología",
+        "ALAFO revista de la Asociacion Latinoamericana de Facultades de Odontologia",
+        "ALAFO; revista de la Asociacion Latinoamericana de Facultades de Odontologia",
+        "ALAFO: Revista de la Asociación Latino Americana de Facultades de Odontología"
+      ]
+    },
+    {
+      "abbr_norm": "amb rev assoc med bras",
+      "candidate_count": 5,
+      "candidates": [
+        "AMB : revista da Associação Médica Brasileira",
+        "AMB revista da Associacao Medica Brasileira",
+        "AMB : revista da Associacao Medica Brasileira",
+        "AMB Revista da Associação Medica Brasileira",
+        "AMB: Revista da Associação Medica Brasileira"
+      ]
+    },
+    {
+      "abbr_norm": "an fac med univ sao paulo",
+      "candidate_count": 5,
+      "candidates": [
+        "Anais. Universidade de São Paulo. Faculdade de Medicina",
+        "Anais Universidade de Sao Paulo Faculdade de Medicina",
+        "Anais Universidade de São Paulo Faculdade de Medicina",
+        "Anais. Universidade de Sao Paulo. Faculdade de Medicina",
+        "Anais. Universidade de São Paulo. Faculdade de Medicina"
+      ]
+    },
+    {
+      "abbr_norm": "an academ med medellin",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales. Academia de Medicina, Medellín",
+        "Anales Academia de Medicina Medellin",
+        "Anales Academia de Medicina Medellín",
+        "Anales. Academia de Medicina, Medellin",
+        "Anales. Academia de Medicina, Medellín"
+      ]
+    },
+    {
+      "abbr_norm": "an ateneo clin quir montev",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales. Ateneo de Clínica Quirúrgica, Montevideo",
+        "Anales Ateneo de Clinica Quirurgica Montevideo",
+        "Anales Ateneo de Clínica Quirúrgica Montevideo",
+        "Anales. Ateneo de Clinica Quirurgica, Montevideo",
+        "Anales. Ateneo de Clínica Quirúrgica, Montevideo"
+      ]
+    },
+    {
+      "abbr_norm": "an hosp alvear b aires",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales. Hospital Torcuato de Alvear (Buenos Aires, Argentina). Ateneo de Patologia y Clínica Médica",
+        "Anales Hospital Torcuato de Alvear Ateneo de Patologia y Clinica Medica",
+        "Anales Hospital Torcuato de Alvear Buenos Aires Ateneo de Patología y Clínica Medica",
+        "Anales. Hospital Torcuato de Alvear (Buenos Aires, Argentina). Ateneo de Patologia y Clinica Medica",
+        "Anales. Hospital Torcuato de Alvear, Buenos Aires. Ateneo de Patología y Clínica Medica"
+      ]
+    },
+    {
+      "abbr_norm": "an acad cienc medicas fisicas nat habana",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales. Real Academia de Ciencias Médicas, Físicas y Naturales de La Habana",
+        "Anales Academia de Ciencias Medicas Físicas y Naturales de la Habana",
+        "Anales Real Academia de Ciencias Medicas Fisicas y Naturales de La Habana",
+        "Anales. Academia de Ciencias Medicas, Físicas y Naturales de la Habana",
+        "Anales. Real Academia de Ciencias Medicas, Fisicas y Naturales de La Habana"
+      ]
+    },
+    {
+      "abbr_norm": "an univ nac asuncion",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales. Universidad Nacional de Asunción. Facultad de Ciencias Médicas",
+        "Anales Universidad Nacional de Asuncion Facultad de Ciencias Medicas",
+        "Anales Universidad Nacional de Asunción Facultad de Ciencias Medicas",
+        "Anales. Universidad Nacional de Asuncion. Facultad de Ciencias Medicas",
+        "Anales. Universidad Nacional de Asunción. Facultad de Ciencias Medicas"
+      ]
+    },
+    {
+      "abbr_norm": "an fac med univ repub montev urug",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales de la Facultad de Medicina, Universidad de la República, Montevideo, Uruguay",
+        "Anales de la Facultad de Medicina Universidad de la Republica Montevideo Uruguay",
+        "Anales de la Facultad de Medicina Universidad de la República Montevideo Uruguay",
+        "Anales de la Facultad de Medicina, Universidad de la Republica, Montevideo, Uruguay",
+        "Anales de la Facultad de Medicina, Universidad de la República, Montevideo, Uruguay"
+      ]
+    },
+    {
+      "abbr_norm": "an med ateneo ramon cajal mex",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales de medicina. Ateneo Ramón y Cajal, Mexico",
+        "Anales de medicina Ateneo Ramon y Cajal Mexico",
+        "Anales de Medicina Ateneo Ramón y Cajal México",
+        "Anales de medicina. Ateneo Ramon y Cajal, Mexico",
+        "Anales de Medicina. Ateneo Ramón y Cajal, México"
+      ]
+    },
+    {
+      "abbr_norm": "an med cir",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales de medicina: Cirugía",
+        "Anales de medicina y cirugía",
+        "Anales de Medicina Cirugía",
+        "Anales de medicina y cirugia",
+        "Anales de Medicina: Cirugía"
+      ]
+    },
+    {
+      "abbr_norm": "an pediatr barc",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales de pediatría (Barcelona, Spain : 2003)",
+        "Anales de pediatria",
+        "Anales de Pediatría",
+        "Anales de pediatria (Barcelona, Spain : 2003)",
+        "Anales de Pediatría (Barcelona, Spain: 2003)"
+      ]
+    },
+    {
+      "abbr_norm": "an inst invest odontol maracaibo",
+      "candidate_count": 5,
+      "candidates": [
+        "Anales - Instituto de Investigaciones Odontológicas, Universidad del Zulia",
+        "Anales Instituto de Investigaciones Odontologicas Universidad del Zulia",
+        "Anales Instituto de Investigaciones Odontológicas Universidad del Zulia",
+        "Anales - Instituto de Investigaciones Odontologicas, Universidad del Zulia",
+        "Anales - Instituto de Investigaciones Odontológicas, Universidad del Zulia"
+      ]
+    },
+    {
+      "abbr_norm": "anasthesiol intensivmed notfallmed schmerzther",
+      "candidate_count": 5,
+      "candidates": [
+        "Anästhesiologie, Intensivmedizin, Notfallmedizin, Schmerztherapie : AINS",
+        "Anasthesiologie Intensivmedizin Notfallmedizin Schmerztherapie",
+        "Anasthesiologie Intensivmedizin Notfallmedizin Schmerztherapie AINS",
+        "Anasthesiologie, Intensivmedizin, Notfallmedizin, Schmerztherapie",
+        "Anasthesiologie, Intensivmedizin, Notfallmedizin, Schmerztherapie : AINS"
+      ]
+    },
+    {
+      "abbr_norm": "ann belg med mil",
+      "candidate_count": 5,
+      "candidates": [
+        "Annales belges de médecine militaire. Belgisch tijdschrift voor militaire geneeskunde",
+        "Annales belges de medecine militaire Belgisch tijdschrift voor militaire geneeskunde",
+        "Annales Belges de Médecine Militaire Belgisch Tijdschrift voor Militaire Geneeskunde",
+        "Annales belges de medecine militaire. Belgisch tijdschrift voor militaire geneeskunde",
+        "Annales Belges de Médecine Militaire. Belgisch Tijdschrift voor Militaire Geneeskunde"
+      ]
+    },
+    {
+      "abbr_norm": "ann hyg med colon",
+      "candidate_count": 5,
+      "candidates": [
+        "Annales d'hygiène et de médecine coloniales",
+        "Annales d'hygiene et de medecine coloniales",
+        "Annales d'Hygiène et de Médecine Coloniales",
+        "Annales dhygiene et de medecine coloniales",
+        "Annales dHygiène et de Médecine Coloniales"
+      ]
+    },
+    {
+      "abbr_norm": "ann otolaryngol chir cervicofac",
+      "candidate_count": 5,
+      "candidates": [
+        "Annales d'oto-laryngologie et de chirurgie cervico faciale : bulletin de la Société d'oto-laryngologie des hôpitaux de Paris",
+        "Annales d'oto-laryngologie et de chirurgie cervico faciale : bulletin de la Societe d'oto-laryngologie des hopitaux de Paris",
+        "Annales d'Oto-Laryngologie et de Chirurgie Cervico-Faciale",
+        "Annales dotolaryngologie et de chirurgie cervico faciale bulletin de la Societe dotolaryngologie des hopitaux de Paris",
+        "Annales dOtoLaryngologie et de Chirurgie CervicoFaciale"
+      ]
+    },
+    {
+      "abbr_norm": "ann cardiol angeiol paris",
+      "candidate_count": 5,
+      "candidates": [
+        "Annales de cardiologie et d'angéiologie",
+        "Annales de cardiologie et d'angeiologie",
+        "Annales de Cardiologie et d'Angiologie",
+        "Annales de cardiologie et dangeiologie",
+        "Annales de Cardiologie et dAngiologie"
+      ]
+    },
+    {
+      "abbr_norm": "ann gastroenterol hepatol paris",
+      "candidate_count": 5,
+      "candidates": [
+        "Annales de gastroentérologie et d'hépatologie",
+        "Annales de gastroenterologie et d'hepatologie",
+        "Annales de Gastroentérologie et d'Hépatologie",
+        "Annales de gastroenterologie et dhepatologie",
+        "Annales de Gastroentérologie et dHépatologie"
+      ]
+    },
+    {
+      "abbr_norm": "ann anesthesiol fr",
+      "candidate_count": 5,
+      "candidates": [
+        "Annales de l'anesthésiologie française",
+        "Annales de l'anesthesiologie francaise",
+        "Annales de l'Anesthésiologie Française",
+        "Annales de lanesthesiologie francaise",
+        "Annales de lAnesthésiologie Française"
+      ]
+    },
+    {
+      "abbr_norm": "ann soc belg med trop 1920",
+      "candidate_count": 5,
+      "candidates": [
+        "Annales de la Société belge de médecine tropicale (1920)",
+        "Annales de la Societe belge de medecine tropicale",
+        "Annales de la Société Belge de Médecine Tropicale",
+        "Annales de la Societe belge de medecine tropicale (1920)",
+        "Annales de la Société Belge de Médecine Tropicale (1920)"
+      ]
+    }
+  ]
+}

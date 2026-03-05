@@ -27,12 +27,16 @@ BASIS_LABELS = {
     "domain": "Exact website/domain match",
     "text-name": "Name found in reference text",
     "fuzzy-name": "Similar name match",
+    "abbrev-name": "Abbreviation expanded to title",
+    "abbrev-fuzzy-name": "Abbreviation expanded (fuzzy title match)",
 }
 
 BASIS_PRIORITY = {
-    "name": 3,
+    "name": 5,
+    "abbrev-name": 4,
     "text-name": 2,
     "domain": 2,
+    "abbrev-fuzzy-name": 1,
     "fuzzy-name": 1,
 }
 
@@ -474,6 +478,17 @@ def _pick_best_match(matches: list[PredatoryDbMatch]) -> PredatoryDbMatch | None
     return max(matches, key=sort_key)
 
 
+def _format_abbreviation_candidates(candidates: list[str], *, display_limit: int = 5) -> str:
+    if not candidates:
+        return ""
+    shown = candidates[:display_limit]
+    extra = len(candidates) - len(shown)
+    joined = "; ".join(shown)
+    if extra > 0:
+        return f"{joined}; +{extra} more"
+    return joined
+
+
 def _norwegian_search_url(journal: str | None) -> str:
     if not journal:
         return ""
@@ -843,6 +858,11 @@ def _build_rows(
     rows: list[dict[str, str]] = []
     for ref in references:
         norwegian_search = _norwegian_search_url(ref.journal)
+        abbreviation_candidates = (
+            provider.abbreviation_candidates(ref.journal, limit=20)
+            if provider and ref.journal
+            else []
+        )
         matches = (
             provider.match_reference(
                 ref,
@@ -874,6 +894,9 @@ def _build_rows(
                 "Matched text": best.matched_value,
                 "Match method": _format_basis(best.basis),
                 "Match confidence": _format_score(best.score),
+                "Expanded journal title": best.expanded_title or "",
+                "Abbreviation candidates": _format_abbreviation_candidates(abbreviation_candidates),
+                "Abbreviation candidate count": str(len(abbreviation_candidates)),
                 "Risk level": best.record.risk_level or "Unknown",
                 "Norwegian level": best.record.norwegian_level or "Unknown",
                 "Registry note": best.record.warning_summary or "",
@@ -890,6 +913,9 @@ def _build_rows(
                 "Matched text": "",
                 "Match method": "",
                 "Match confidence": "",
+                "Expanded journal title": "",
+                "Abbreviation candidates": _format_abbreviation_candidates(abbreviation_candidates),
+                "Abbreviation candidate count": str(len(abbreviation_candidates)),
                 "Risk level": "",
                 "Norwegian level": "",
                 "Registry note": "",
@@ -1501,6 +1527,8 @@ def main() -> None:
                     "Risk level",
                     "Registry record",
                     "Matched text",
+                    "Expanded journal title",
+                    "Abbreviation candidates",
                     "Source URL",
                     "Norwegian registry search",
                 ]
@@ -1568,6 +1596,11 @@ def main() -> None:
                     details_cols[0].write(selected_row["Registry record"] or "Not found in loaded registry")
                     details_cols[1].markdown("**Reference check**")
                     details_cols[1].write(selected_row["Reference check"])
+                    st.markdown("**Abbreviation expansion candidates**")
+                    st.write(selected_row["Abbreviation candidates"] or "No abbreviation expansion candidates")
+                    if selected_row.get("Expanded journal title"):
+                        st.markdown("**Expanded journal title used for matching**")
+                        st.write(selected_row["Expanded journal title"])
                     st.markdown("**Registry note**")
                     st.write(selected_row["Registry note"] or "No additional note")
                     st.markdown('</div>', unsafe_allow_html=True)
