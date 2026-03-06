@@ -16,6 +16,11 @@ ROOT = Path(__file__).resolve().parent
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+RUNTIME_ROOT = (
+    Path(sys.executable).resolve().parent
+    if getattr(sys, "frozen", False)
+    else ROOT
+)
 
 from reference_checker.predatory_db import PredatoryDbMatch, PredatoryDbProvider  # noqa: E402
 from reference_checker.normalization import extract_domain, normalize_text  # noqa: E402
@@ -541,7 +546,7 @@ def _build_excel_bytes(df: pd.DataFrame) -> bytes:
 
 
 def _custom_watchlist_path() -> Path:
-    return ROOT / "data" / CUSTOM_WATCHLIST_FILENAME
+    return RUNTIME_ROOT / "data" / CUSTOM_WATCHLIST_FILENAME
 
 
 def _empty_custom_watchlist_df() -> pd.DataFrame:

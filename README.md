@@ -8,12 +8,20 @@ It can:
 - show a risk-oriented summary in a simple web UI
 - export results to CSV/Excel for sharing
 
-## Fastest Demo Start (Windows, non-coder friendly)
+## For Users (No Coding Required)
 
-### Option A: Use the packaged app
-If you already have `dist/ReferenceChecker.exe`, double-click it.
+1. Go to **GitHub Releases** for this repository.
+2. Download the latest `ReferenceChecker-windows-x64.zip`.
+3. Unzip it.
+4. Double-click `ReferenceChecker.exe`.
 
-### Option B: Run from source (recommended for latest behavior)
+Notes:
+- No Python installation is needed.
+- If Windows SmartScreen appears, choose **More info** -> **Run anyway** (if you trust the source).
+- Custom watchlist entries are saved in a local `data/` folder next to the EXE.
+
+## For Developers (Run from Source)
+
 1. Open PowerShell in this folder.
 2. Run:
 
@@ -30,6 +38,24 @@ What this does:
 - opens the app
 
 For a presenter-only checklist, see [DEMO_RUNBOOK.md](./DEMO_RUNBOOK.md).
+
+## Build a Release Package (Maintainers)
+
+Use one of these commands:
+
+```powershell
+.\build.ps1
+```
+
+or
+
+```bat
+build.bat
+```
+
+Output:
+- `dist/ReferenceChecker.exe`
+- `dist/ReferenceChecker-windows-x64.zip` (the file to upload to GitHub Releases)
 
 ## Using the App (Step by Step)
 

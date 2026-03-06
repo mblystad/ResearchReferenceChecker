@@ -1,7 +1,16 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_all
 
-datas = [('app.py', '.'), ('src', 'src'), ('predatory_db_v7_with_norwegian_levels.csv', '.'), ('data', 'data')]
+datas = [
+    ("app.py", "."),
+    ("src", "src"),
+    ("reflogo.png", "."),
+    (".streamlit", ".streamlit"),
+    ("predatory_db_v7_with_norwegian_levels.csv", "."),
+    ("pred_pub_list.csv", "."),
+    ("pred_jour_list.csv", "."),
+    ("data", "data"),
+]
 binaries = []
 hiddenimports = []
 tmp_ret = collect_all('streamlit')
