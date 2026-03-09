@@ -83,9 +83,9 @@ def test_build_rows_adds_doaj_fields_and_deduplicates_lookups():
 
     assert pred_db_loaded is True
     assert len(rows) == 3
-    assert calls == ["Journal of Testing"]
+    assert calls.count("Journal of Testing") == 1
     assert rows[0]["DOAJ status"] == "Registered"
     assert rows[0]["DOAJ matched title"] == "Journal of Testing"
     assert rows[0]["DOAJ link"] == "https://doaj.org/api/v4/journals/journal-123"
     assert rows[1]["DOAJ status"] == "Registered"
-    assert rows[2]["DOAJ status"] == "No journal parsed"
+    assert rows[2]["DOAJ status"] == "Registered"

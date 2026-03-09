@@ -1429,7 +1429,7 @@ def main() -> None:
                             options=[str(column) for column in csv_df.columns],
                         )
                         st.caption("Preview")
-                        st.dataframe(csv_df.head(5), use_container_width=True, hide_index=True)
+                        st.dataframe(csv_df.head(5), width="stretch", hide_index=True)
                         if st.button("Load column", key="load_csv_column"):
                             try:
                                 uploaded_text = _extract_reference_text_from_upload(
@@ -1590,7 +1590,7 @@ def main() -> None:
                             "source": "Source",
                         }
                     )
-                    st.dataframe(display_df, use_container_width=True, hide_index=True)
+                    st.dataframe(display_df, width="stretch", hide_index=True)
 
                     removal_options = [
                         f"{idx}|{_watchlist_display_label(custom_watchlist_df.iloc[idx])}"
@@ -1871,10 +1871,10 @@ def main() -> None:
                 ]
                 for column_name, style_fn in style_rules:
                     if column_name in display_df.columns:
-                        styled = styled.applymap(style_fn, subset=[column_name])
+                        styled = styled.map(style_fn, subset=[column_name])
                 st.dataframe(
                     styled,
-                    use_container_width=True,
+                    width="stretch",
                     hide_index=True,
                     column_config=column_config,
                 )
