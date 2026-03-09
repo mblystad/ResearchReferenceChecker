@@ -4,6 +4,9 @@ Research Reference Checker helps you review references for potential warning sig
 
 It can:
 - check references against local predatory journal/publisher lists
+- optionally check whether a parsed journal is registered in DOAJ
+- optionally add a Norwegian Kanalregister search link for parsed journals
+- optionally match against a local custom watchlist of journals/publishers
 - handle abbreviated journal names (for example `J. Clin. Oncol.` style inputs)
 - show a risk-oriented summary in a simple web UI
 - export results to CSV/Excel for sharing
@@ -60,13 +63,31 @@ Output:
 ## Using the App (Step by Step)
 
 1. Paste references into the text box, one reference per line.
-2. Click **Analyze references**.
-3. Review the **Recommended next step** column first.
-4. Open a row in **Inspect reference** to see:
+2. Choose which checks to run.
+3. Click **Run check**.
+4. Review the **Recommended next step** column first.
+5. Open a row in **Inspect reference** to see:
 - why it was flagged
 - match method
 - abbreviation expansion candidates (if relevant)
-5. Export results with **Download CSV** or **Download Excel (.xlsx)**.
+6. Export results with **Download CSV** or **Download Excel (.xlsx)**.
+
+## Data Sources and Optional Checks
+
+The app can use these sources during a run:
+- DOAJ API for journal registration checks
+- predatory registry data collected from `predatoryjournals.org`
+- Norwegian Kanalregister search links for parsed journal titles
+- your own saved custom watchlist in `data/custom_watchlist.csv`
+
+Predatory registry source details shown in the app:
+- source website: `https://www.predatoryjournals.org/`
+- update label used in the UI: `February 2, 2026`
+
+Important:
+- all of these checks are optional in the UI
+- if you disable every optional check, the app switches to a completeness-only mode
+- completeness-only mode highlights what is missing from each reference, such as authors, journal/venue, year, or DOI/URL
 
 ## What the Results Mean
 

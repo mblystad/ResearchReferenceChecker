@@ -23,6 +23,7 @@ RUNTIME_ROOT = (
 )
 
 from reference_checker.predatory_db import PredatoryDbMatch, PredatoryDbProvider  # noqa: E402
+from reference_checker.doaj import DoajClient, DoajJournalMatch  # noqa: E402
 from reference_checker.normalization import extract_domain, normalize_text  # noqa: E402
 from reference_checker.reference_parser import ReferenceListParser  # noqa: E402
 
@@ -142,6 +143,10 @@ STARTER_WATCHLIST = [
         ),
     },
 ]
+
+PREDATORY_REGISTRY_SOURCE_LABEL = "predatoryjournals.org"
+PREDATORY_REGISTRY_SOURCE_URL = "https://www.predatoryjournals.org/"
+PREDATORY_REGISTRY_UPDATED_LABEL = "February 2, 2026"
 
 SAMPLE_TEXT = """Nashif, S., Raihan, M. R., Islam, M. R., & Imam, M. H. (2018). Heart disease detection by using machine learning algorithms and a real-time cardiovascular health monitoring system. World Journal of Engineering and Technology, 6, 854–873. https://doi.org/10.4236/wjet.2018.64057
 
@@ -752,10 +757,10 @@ def _has_locator(raw_text: str, parsed_doi: str | None, parsed_url: str | None) 
     return _has_doi(raw_text, parsed_doi) or _has_url(raw_text, parsed_url)
 
 
-def _missing_field_summary(ref) -> str:
+def _missing_fields(ref) -> list[str]:
     raw_text = ref.raw_text or ""
     ref_type = (ref.entry_type or "unknown").lower()
-    missing = []
+    missing: list[str] = []
 
     if ref_type == "journal":
         if not _has_authors(raw_text, ref.authors):
@@ -820,6 +825,11 @@ def _missing_field_summary(ref) -> str:
             missing.append("year")
         if not _has_locator(raw_text, ref.doi, ref.url):
             missing.append("doi/url")
+    return missing
+
+
+def _missing_field_summary(ref) -> str:
+    missing = _missing_fields(ref)
 
     if not missing:
         return "OK"
@@ -844,6 +854,100 @@ def _action_needed(row: dict[str, str]) -> str:
     return "Looks OK"
 
 
+def _check_settings(
+    *,
+    predatory_registry: bool,
+    norwegian_registry: bool,
+    doaj: bool,
+    custom_watchlist: bool,
+) -> dict[str, bool]:
+    return {
+        "predatory_registry": predatory_registry,
+        "norwegian_registry": norwegian_registry,
+        "doaj": doaj,
+        "custom_watchlist": custom_watchlist,
+    }
+
+
+def _active_check_labels(settings: dict[str, bool]) -> list[str]:
+    labels: list[str] = []
+    if settings.get("predatory_registry"):
+        labels.append("Predatory registry")
+    if settings.get("norwegian_registry"):
+        labels.append("Norwegian Kanalregister link")
+    if settings.get("doaj"):
+        labels.append("DOAJ")
+    if settings.get("custom_watchlist"):
+        labels.append("Custom watchlist")
+    return labels
+
+
+def _has_external_checks(settings: dict[str, bool]) -> bool:
+    return any(settings.values())
+
+
+def _clean_journal_name(value: str | None) -> str:
+    return " ".join(str(value or "").split()).strip(" .,;:")
+
+
+def _journal_cache_key(value: str | None) -> str:
+    cleaned = _clean_journal_name(value)
+    normalized = normalize_text(cleaned)
+    return normalized or cleaned.lower()
+
+
+def _unique_journal_names(references) -> list[str]:
+    unique: dict[str, str] = {}
+    for ref in references:
+        cleaned = _clean_journal_name(ref.journal)
+        if not cleaned:
+            continue
+        key = _journal_cache_key(cleaned)
+        if key and key not in unique:
+            unique[key] = cleaned
+    return list(unique.values())
+
+
+def _estimate_doaj_lookup(reference_text: str) -> tuple[int, int, int]:
+    parser = ReferenceListParser()
+    references = parser.parse(reference_text)
+    journal_count = len(_unique_journal_names(references))
+    if journal_count == 0:
+        return 0, 0, 0
+    min_seconds = max(1, int(round(journal_count * 0.35)))
+    max_seconds = max(min_seconds, int(round(journal_count * 0.9)))
+    return journal_count, min_seconds, max_seconds
+
+
+def _lookup_doaj_matches(references, client: DoajClient) -> dict[str, DoajJournalMatch]:
+    lookup_cache: dict[str, DoajJournalMatch] = {}
+    for journal_name in _unique_journal_names(references):
+        lookup_cache[_journal_cache_key(journal_name)] = client.lookup_journal(journal_name)
+    return lookup_cache
+
+
+def _doaj_status_for_reference(
+    journal_name: str | None,
+    lookup_cache: dict[str, DoajJournalMatch],
+    *,
+    enabled: bool,
+) -> tuple[str, str, str]:
+    cleaned = _clean_journal_name(journal_name)
+    if not enabled:
+        return "Not checked", "", ""
+    if not cleaned:
+        return "No journal parsed", "", ""
+
+    match = lookup_cache.get(_journal_cache_key(cleaned))
+    if match is None:
+        return "Lookup failed", "", ""
+    if match.error == "lookup-failed":
+        return "Lookup failed", "", ""
+    if match.found:
+        return "Registered", match.matched_title or cleaned, match.record_url
+    return "Not found", "", ""
+
+
 def _build_rows(
     reference_text: str,
     *,
@@ -851,18 +955,35 @@ def _build_rows(
     max_fuzzy_matches: int,
     pred_db: PredatoryDbProvider | None = None,
     custom_db: PredatoryDbProvider | None = None,
+    check_predatory_registry: bool = True,
+    include_norwegian_registry_link: bool = True,
+    check_doaj: bool = False,
+    check_custom_watchlist: bool = True,
+    doaj_client: DoajClient | None = None,
 ) -> tuple[list[dict[str, str]], bool]:
     parser = ReferenceListParser()
     references = parser.parse(reference_text)
     if not references:
         return [], False
 
-    provider = pred_db or PredatoryDbProvider.load_default(base_dir=ROOT)
+    provider = (
+        pred_db or PredatoryDbProvider.load_default(base_dir=ROOT)
+        if check_predatory_registry
+        else None
+    )
     pred_db_loaded = provider is not None
+    doaj_lookup_cache: dict[str, DoajJournalMatch] = {}
+    if check_doaj:
+        doaj_lookup_cache = _lookup_doaj_matches(references, doaj_client or DoajClient())
 
     rows: list[dict[str, str]] = []
     for ref in references:
-        norwegian_search = _norwegian_search_url(ref.journal)
+        norwegian_search = _norwegian_search_url(ref.journal) if include_norwegian_registry_link else ""
+        doaj_status, doaj_title, doaj_link = _doaj_status_for_reference(
+            ref.journal,
+            doaj_lookup_cache,
+            enabled=check_doaj,
+        )
         abbreviation_candidates = (
             provider.abbreviation_candidates(ref.journal, limit=20)
             if provider and ref.journal
@@ -886,11 +1007,13 @@ def _build_rows(
                 fuzzy_threshold=fuzzy_threshold,
                 max_fuzzy_matches=max_fuzzy_matches,
             )
-            if custom_db
+            if custom_db and check_custom_watchlist
             else []
         )
         best = _pick_best_match(matches)
         best_custom = _pick_best_match(custom_matches)
+        missing_fields = _missing_fields(ref)
+        missing_fields_label = ", ".join(missing_fields) if missing_fields else "None"
         if best:
             row = {
                 "Reference": ref.raw_text,
@@ -908,12 +1031,18 @@ def _build_rows(
                 "Source": best.record.source or "",
                 "Source URL": best.record.source_url or "",
                 "Norwegian registry search": norwegian_search,
+                "DOAJ status": doaj_status,
+                "DOAJ matched title": doaj_title,
+                "DOAJ link": doaj_link,
+                "Missing fields": missing_fields_label,
                 "Reference check": _missing_field_summary(ref),
             }
         else:
             row = {
                 "Reference": ref.raw_text,
-                "Registry warning": "No match",
+                "Registry warning": (
+                    "No match" if check_predatory_registry and provider is not None else "Not run"
+                ),
                 "Registry record": "",
                 "Matched text": "",
                 "Match method": "",
@@ -927,6 +1056,10 @@ def _build_rows(
                 "Source": "",
                 "Source URL": "",
                 "Norwegian registry search": norwegian_search,
+                "DOAJ status": doaj_status,
+                "DOAJ matched title": doaj_title,
+                "DOAJ link": doaj_link,
+                "Missing fields": missing_fields_label,
                 "Reference check": _missing_field_summary(ref),
             }
         if best_custom:
@@ -943,7 +1076,7 @@ def _build_rows(
             if not row.get("Registry note"):
                 row["Registry note"] = best_custom.record.warning_summary or ""
         else:
-            row["Custom watchlist warning"] = "No match"
+            row["Custom watchlist warning"] = "No match" if check_custom_watchlist else "Not run"
             row["Custom watchlist entry"] = ""
             row["Custom matched text"] = ""
             row["Custom match method"] = ""
@@ -971,6 +1104,15 @@ def _style_custom_status(value: str) -> str:
     return "background-color: #2a3542; color: #f1f5f9; font-weight: 600;"
 
 
+def _style_doaj_status(value: str) -> str:
+    value_norm = str(value or "").strip().lower()
+    if value_norm == "registered":
+        return "background-color: #2c5b48; color: #eefbf3; font-weight: 700;"
+    if value_norm in {"not found", "lookup failed", "no journal parsed"}:
+        return "background-color: #5b4720; color: #fff6d8; font-weight: 700;"
+    return "background-color: #2a3542; color: #f1f5f9; font-weight: 600;"
+
+
 def _style_risk_level(value: str) -> str:
     if not value or value == "Unknown":
         return "color: #d5dde6;"
@@ -993,7 +1135,7 @@ def _style_norwegian_level(value: str) -> str:
 
 
 def _style_missing_fields(value: str) -> str:
-    if not value or value == "OK":
+    if not value or value in {"OK", "None"}:
         return "color: #f1f5f9; font-weight: 700;"
     return "background-color: #7c1f2a; color: #fff5f7; font-weight: 700;"
 
@@ -1013,19 +1155,21 @@ def _short_text(value: str, max_len: int = 110) -> str:
     return text[: max_len - 1].rstrip() + "..."
 
 
-def _view_options() -> list[str]:
-    return [
+def _view_options(settings: dict[str, bool]) -> list[str]:
+    options = [
         "Needs attention",
         "All references",
-        "Registry-flagged",
-        "Watchlist-flagged",
-        "Not found in registry",
         "Missing details",
     ]
+    if settings.get("predatory_registry"):
+        options.extend(["Registry-flagged", "Not found in registry"])
+    if settings.get("custom_watchlist"):
+        options.append("Watchlist-flagged")
+    return options
 
 
-def _pick_view() -> str:
-    options = _view_options()
+def _pick_view(settings: dict[str, bool]) -> str:
+    options = _view_options(settings)
     default_option = "Needs attention"
     label = "Quick filter"
     if hasattr(st, "segmented_control"):
@@ -1038,7 +1182,11 @@ def _pick_view() -> str:
 
 def _filter_rows(df: pd.DataFrame, view_name: str) -> pd.DataFrame:
     if view_name == "Needs attention":
-        return df[df["Recommended next step"].isin(["Check immediately", "Check manually"])]
+        return df[
+            df["Recommended next step"].isin(
+                ["Check immediately", "Check manually", "Add missing details"]
+            )
+        ]
     if view_name == "Registry-flagged":
         return df[df["Registry warning"] == "Match"]
     if view_name == "Watchlist-flagged":
@@ -1083,6 +1231,84 @@ def _sort_for_review(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def _result_columns(settings: dict[str, bool]) -> list[str]:
+    columns = [
+        "Reference",
+        "Recommended next step",
+        "Missing fields",
+    ]
+    if settings.get("predatory_registry"):
+        columns.extend(
+            [
+                "Registry warning",
+                "Risk level",
+                "Registry record",
+                "Matched text",
+                "Expanded journal title",
+                "Abbreviation candidates",
+                "Source URL",
+            ]
+        )
+    if settings.get("doaj"):
+        columns.extend(
+            [
+                "DOAJ status",
+                "DOAJ matched title",
+                "DOAJ link",
+            ]
+        )
+    if settings.get("custom_watchlist"):
+        columns.append("Custom watchlist warning")
+    if settings.get("norwegian_registry"):
+        columns.append("Norwegian registry search")
+    return columns
+
+
+def _export_columns(settings: dict[str, bool]) -> list[str]:
+    base = [
+        "Reference",
+        "Recommended next step",
+        "Missing fields",
+        "Reference check",
+    ]
+    if settings.get("predatory_registry"):
+        base.extend(
+            [
+                "Registry warning",
+                "Registry record",
+                "Matched text",
+                "Match method",
+                "Match confidence",
+                "Expanded journal title",
+                "Abbreviation candidates",
+                "Abbreviation candidate count",
+                "Risk level",
+                "Norwegian level",
+                "Registry note",
+                "Source",
+                "Source URL",
+            ]
+        )
+    if settings.get("doaj"):
+        base.extend(["DOAJ status", "DOAJ matched title", "DOAJ link"])
+    if settings.get("custom_watchlist"):
+        base.extend(
+            [
+                "Custom watchlist warning",
+                "Custom watchlist entry",
+                "Custom matched text",
+                "Custom match method",
+                "Custom confidence",
+                "Custom note",
+                "Custom source",
+                "Custom source URL",
+            ]
+        )
+    if settings.get("norwegian_registry"):
+        base.append("Norwegian registry search")
+    return [column for column in base if column]
+
+
 def _logo_data_uri() -> str:
     logo_path = ROOT / "reflogo.png"
     if not logo_path.exists():
@@ -1115,6 +1341,13 @@ def main() -> None:
         st.session_state.analysis_pred_db_loaded = False
     if "analysis_notice" not in st.session_state:
         st.session_state.analysis_notice = ""
+    if "analysis_settings" not in st.session_state:
+        st.session_state.analysis_settings = _check_settings(
+            predatory_registry=True,
+            norwegian_registry=True,
+            doaj=True,
+            custom_watchlist=True,
+        )
     if "custom_watchlist_df" not in st.session_state:
         st.session_state.custom_watchlist_df = _load_custom_watchlist_df()
 
@@ -1160,115 +1393,6 @@ def main() -> None:
                 st.session_state.analysis_ran = False
                 st.session_state.analysis_error = ""
                 st.session_state.analysis_notice = ""
-
-        if pred_db is None:
-            st.warning(
-                "Registry files are not loaded. This run can still check reference completeness."
-            )
-
-        with st.expander("Custom watchlist filter", expanded=False):
-            st.caption(
-                "Add publishers or journals your institution wants to manually review. "
-                "Saved to `data/custom_watchlist.csv`."
-            )
-            st.info(
-                "Why this helps: public registries are useful but never complete. "
-                "A custom watchlist adds your local policy context, helps catch known concerns early, "
-                "and reduces false confidence when something is simply not found in a registry."
-            )
-
-            starter_labels = {
-                entry["name"]: f"{entry['name']} ({entry['risk_level']})"
-                for entry in STARTER_WATCHLIST
-            }
-            selected_starters = st.multiselect(
-                "Starter entries from current research scan",
-                options=[entry["name"] for entry in STARTER_WATCHLIST],
-                format_func=lambda name: starter_labels.get(name, name),
-                key="starter_watchlist_selection",
-            )
-            if st.button("Add selected starters", key="add_starter_watchlist"):
-                starter_rows = [
-                    {**entry, "entry_id": _watchlist_entry_id(entry["name"], entry["url_domain"])}
-                    for entry in STARTER_WATCHLIST
-                    if entry["name"] in selected_starters
-                ]
-                updated_df, added_count = _append_watchlist_rows(custom_watchlist_df, starter_rows)
-                if added_count:
-                    _save_custom_watchlist_df(updated_df)
-                    st.session_state.custom_watchlist_df = updated_df
-                    custom_watchlist_df = updated_df
-                    st.success(f"Added {added_count} starter entr{'y' if added_count == 1 else 'ies'}.")
-                else:
-                    st.info("No new starter entries were added.")
-
-            with st.form("manual_watchlist_form", clear_on_submit=True):
-                watch_name = st.text_input("Publisher or journal name")
-                watch_domain = st.text_input("Domain (optional)")
-                watch_concern = st.selectbox(
-                    "Concern level",
-                    options=["Medium", "High", "Low"],
-                    index=0,
-                )
-                watch_note = st.text_input("Short note (optional)")
-                watch_source = st.text_input("Source label (optional)", value="Institution watchlist")
-                watch_source_url = st.text_input("Source URL (optional)")
-                add_manual = st.form_submit_button("Add custom entry")
-
-            if add_manual:
-                manual_row = {
-                    "name": watch_name.strip(),
-                    "type": "publisher",
-                    "url_domain": extract_domain(watch_domain) or "",
-                    "risk_level": watch_concern,
-                    "warning_summary": watch_note.strip(),
-                    "source": watch_source.strip() or "Institution watchlist",
-                    "source_url": watch_source_url.strip(),
-                    "entry_id": _watchlist_entry_id(watch_name.strip(), watch_domain.strip()),
-                }
-                updated_df, added_count = _append_watchlist_rows(custom_watchlist_df, [manual_row])
-                if added_count:
-                    _save_custom_watchlist_df(updated_df)
-                    st.session_state.custom_watchlist_df = updated_df
-                    custom_watchlist_df = updated_df
-                    st.success("Custom entry added.")
-                else:
-                    st.info("Entry was blank or already exists.")
-
-            if not custom_watchlist_df.empty:
-                st.caption(f"{len(custom_watchlist_df)} custom entr{'y' if len(custom_watchlist_df) == 1 else 'ies'} loaded.")
-                display_df = custom_watchlist_df[
-                    ["name", "url_domain", "risk_level", "warning_summary", "source"]
-                ].rename(
-                    columns={
-                        "name": "Name",
-                        "url_domain": "Domain",
-                        "risk_level": "Concern",
-                        "warning_summary": "Note",
-                        "source": "Source",
-                    }
-                )
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-                removal_options = [
-                    f"{idx}|{_watchlist_display_label(custom_watchlist_df.iloc[idx])}"
-                    for idx in range(len(custom_watchlist_df))
-                ]
-                selected_remove = st.selectbox(
-                    "Remove entry",
-                    options=removal_options,
-                    index=0,
-                    key="watchlist_remove_selection",
-                )
-                if st.button("Remove selected entry", key="remove_watchlist_entry"):
-                    remove_idx = int(selected_remove.split("|", 1)[0])
-                    updated_df = custom_watchlist_df.drop(index=remove_idx).reset_index(drop=True)
-                    _save_custom_watchlist_df(updated_df)
-                    st.session_state.custom_watchlist_df = updated_df
-                    custom_watchlist_df = updated_df
-                    st.success("Entry removed.")
-            else:
-                st.info("No custom watchlist entries yet.")
 
         uploaded = st.file_uploader(
             "Upload TXT or CSV",
@@ -1326,35 +1450,204 @@ def main() -> None:
                     st.session_state.reference_text = preview_text
                     st.session_state.analysis_ran = False
 
-        simple_mode = st.toggle(
-            "Standard matching",
-            value=True,
-            help="Recommended for most reference lists.",
+        st.subheader("2. Choose checks")
+        st.caption("Turn sources on or off for this run.")
+        saved_settings = st.session_state.analysis_settings
+        check_predatory_registry = st.toggle(
+            "Predatory registry check",
+            value=bool(saved_settings.get("predatory_registry", True)),
+            help="Match journals and publishers against the loaded predatory registry files.",
+        )
+        if check_predatory_registry:
+            st.caption(
+                f"Source: [{PREDATORY_REGISTRY_SOURCE_LABEL}]({PREDATORY_REGISTRY_SOURCE_URL}) "
+                f"• Updated: {PREDATORY_REGISTRY_UPDATED_LABEL}"
+            )
+            if pred_db is None:
+                st.warning(
+                    "Registry files are not loaded. This run can still check reference completeness."
+                )
+
+        include_norwegian_registry_link = st.toggle(
+            "Norwegian Kanalregister link",
+            value=bool(saved_settings.get("norwegian_registry", True)),
+            help="Add a search link for the parsed journal in the Norwegian register.",
         )
 
-        if simple_mode:
+        check_doaj = st.toggle(
+            "DOAJ registration check",
+            value=bool(saved_settings.get("doaj", True)),
+            help="Look up each parsed journal title in the DOAJ public API.",
+        )
+        if check_doaj:
+            journal_count, min_seconds, max_seconds = _estimate_doaj_lookup(
+                st.session_state.reference_text
+            )
+            if journal_count:
+                st.caption(
+                    f"Estimated extra time: about {min_seconds}-{max_seconds} seconds for "
+                    f"{journal_count} unique journal title{'s' if journal_count != 1 else ''}."
+                )
+            else:
+                st.caption(
+                    "Estimated extra time: none yet. Add references with parsed journal titles to use the DOAJ check."
+                )
+            st.caption(
+                "Uses DOAJ's public API only, one request per unique journal title, with a small per-run cache."
+            )
+
+        check_custom_watchlist = st.toggle(
+            "Custom watchlist",
+            value=bool(saved_settings.get("custom_watchlist", True)),
+            help="Show the custom watchlist manager and match against saved local watchlist entries.",
+        )
+        if check_custom_watchlist:
+            with st.expander("Custom watchlist filter", expanded=False):
+                st.caption(
+                    "Add publishers or journals your institution wants to manually review. "
+                    "Saved to `data/custom_watchlist.csv`."
+                )
+                st.info(
+                    "Why this helps: public registries are useful but never complete. "
+                    "A custom watchlist adds your local policy context, helps catch known concerns early, "
+                    "and reduces false confidence when something is simply not found in a registry."
+                )
+
+                starter_labels = {
+                    entry["name"]: f"{entry['name']} ({entry['risk_level']})"
+                    for entry in STARTER_WATCHLIST
+                }
+                selected_starters = st.multiselect(
+                    "Starter entries from current research scan",
+                    options=[entry["name"] for entry in STARTER_WATCHLIST],
+                    format_func=lambda name: starter_labels.get(name, name),
+                    key="starter_watchlist_selection",
+                )
+                if st.button("Add selected starters", key="add_starter_watchlist"):
+                    starter_rows = [
+                        {**entry, "entry_id": _watchlist_entry_id(entry["name"], entry["url_domain"])}
+                        for entry in STARTER_WATCHLIST
+                        if entry["name"] in selected_starters
+                    ]
+                    updated_df, added_count = _append_watchlist_rows(custom_watchlist_df, starter_rows)
+                    if added_count:
+                        _save_custom_watchlist_df(updated_df)
+                        st.session_state.custom_watchlist_df = updated_df
+                        custom_watchlist_df = updated_df
+                        st.success(
+                            f"Added {added_count} starter entr{'y' if added_count == 1 else 'ies'}."
+                        )
+                    else:
+                        st.info("No new starter entries were added.")
+
+                with st.form("manual_watchlist_form", clear_on_submit=True):
+                    watch_name = st.text_input("Publisher or journal name")
+                    watch_domain = st.text_input("Domain (optional)")
+                    watch_concern = st.selectbox(
+                        "Concern level",
+                        options=["Medium", "High", "Low"],
+                        index=0,
+                    )
+                    watch_note = st.text_input("Short note (optional)")
+                    watch_source = st.text_input(
+                        "Source label (optional)", value="Institution watchlist"
+                    )
+                    watch_source_url = st.text_input("Source URL (optional)")
+                    add_manual = st.form_submit_button("Add custom entry")
+
+                if add_manual:
+                    manual_row = {
+                        "name": watch_name.strip(),
+                        "type": "publisher",
+                        "url_domain": extract_domain(watch_domain) or "",
+                        "risk_level": watch_concern,
+                        "warning_summary": watch_note.strip(),
+                        "source": watch_source.strip() or "Institution watchlist",
+                        "source_url": watch_source_url.strip(),
+                        "entry_id": _watchlist_entry_id(watch_name.strip(), watch_domain.strip()),
+                    }
+                    updated_df, added_count = _append_watchlist_rows(custom_watchlist_df, [manual_row])
+                    if added_count:
+                        _save_custom_watchlist_df(updated_df)
+                        st.session_state.custom_watchlist_df = updated_df
+                        custom_watchlist_df = updated_df
+                        st.success("Custom entry added.")
+                    else:
+                        st.info("Entry was blank or already exists.")
+
+                if not custom_watchlist_df.empty:
+                    st.caption(
+                        f"{len(custom_watchlist_df)} custom entr{'y' if len(custom_watchlist_df) == 1 else 'ies'} loaded."
+                    )
+                    display_df = custom_watchlist_df[
+                        ["name", "url_domain", "risk_level", "warning_summary", "source"]
+                    ].rename(
+                        columns={
+                            "name": "Name",
+                            "url_domain": "Domain",
+                            "risk_level": "Concern",
+                            "warning_summary": "Note",
+                            "source": "Source",
+                        }
+                    )
+                    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+                    removal_options = [
+                        f"{idx}|{_watchlist_display_label(custom_watchlist_df.iloc[idx])}"
+                        for idx in range(len(custom_watchlist_df))
+                    ]
+                    selected_remove = st.selectbox(
+                        "Remove entry",
+                        options=removal_options,
+                        index=0,
+                        key="watchlist_remove_selection",
+                    )
+                    if st.button("Remove selected entry", key="remove_watchlist_entry"):
+                        remove_idx = int(selected_remove.split("|", 1)[0])
+                        updated_df = custom_watchlist_df.drop(index=remove_idx).reset_index(drop=True)
+                        _save_custom_watchlist_df(updated_df)
+                        st.session_state.custom_watchlist_df = updated_df
+                        custom_watchlist_df = updated_df
+                        st.success("Entry removed.")
+                else:
+                    st.info("No custom watchlist entries yet.")
+
+        matching_enabled = check_predatory_registry or check_custom_watchlist
+        if matching_enabled:
+            simple_mode = st.toggle(
+                "Standard matching",
+                value=True,
+                help="Recommended for most reference lists.",
+            )
+            if simple_mode:
+                fuzzy_threshold = 0.88
+                max_fuzzy_matches = 3
+            else:
+                st.caption("Adjust only if matching looks too broad or too strict.")
+                fuzzy_threshold = st.slider(
+                    "Match strictness",
+                    min_value=0.7,
+                    max_value=0.98,
+                    value=0.88,
+                    step=0.01,
+                )
+                max_fuzzy_matches = st.number_input(
+                    "Suggestions per reference",
+                    min_value=1,
+                    max_value=10,
+                    value=3,
+                    step=1,
+                )
+        else:
             fuzzy_threshold = 0.88
             max_fuzzy_matches = 3
-        else:
-            st.caption("Adjust only if matching looks too broad or too strict.")
-            fuzzy_threshold = st.slider(
-                "Match strictness",
-                min_value=0.7,
-                max_value=0.98,
-                value=0.88,
-                step=0.01,
-            )
-            max_fuzzy_matches = st.number_input(
-                "Suggestions per reference",
-                min_value=1,
-                max_value=10,
-                value=3,
-                step=1,
+            st.caption(
+                "Registry matching is off. This run will only use the checks enabled above."
             )
 
         with st.form("analysis_form", clear_on_submit=False):
-            st.subheader("2. Run check")
-            st.caption("Use standard matching unless results look too broad or too strict.")
+            st.subheader("3. Run check")
+            st.caption("Run the checks selected above on the references below.")
             reference_text = st.text_area(
                 "Reference list",
                 placeholder="One full reference per line",
@@ -1364,10 +1657,19 @@ def main() -> None:
             action = st.form_submit_button("Run check")
 
         if action:
+            run_settings = _check_settings(
+                predatory_registry=check_predatory_registry,
+                norwegian_registry=include_norwegian_registry_link,
+                doaj=check_doaj,
+                custom_watchlist=check_custom_watchlist,
+            )
+            st.session_state.analysis_settings = run_settings
             st.session_state.analysis_error = ""
             if not reference_text.strip():
                 st.session_state.analysis_rows = []
-                st.session_state.analysis_pred_db_loaded = pred_db is not None
+                st.session_state.analysis_pred_db_loaded = (
+                    pred_db is not None if check_predatory_registry else False
+                )
                 st.session_state.analysis_ran = True
                 st.session_state.analysis_notice = "Add at least one reference."
             else:
@@ -1375,21 +1677,30 @@ def main() -> None:
                     latest_custom_df = st.session_state.custom_watchlist_df
                     latest_custom_db = (
                         PredatoryDbProvider.from_csv_paths([custom_watchlist_path])
-                        if not latest_custom_df.empty and custom_watchlist_path.exists()
+                        if check_custom_watchlist
+                        and not latest_custom_df.empty
+                        and custom_watchlist_path.exists()
                         else None
                     )
                     with st.status("Running checks...", expanded=True) as status_box:
                         status_box.write("1/3 Reading references")
                         progress = st.progress(15)
-                        status_box.write("2/3 Matching against registry data")
+                        if _has_external_checks(run_settings):
+                            status_box.write("2/3 Running selected checks")
+                        else:
+                            status_box.write("2/3 Checking reference completeness")
                         rows, pred_db_loaded = _build_rows(
                             reference_text,
                             fuzzy_threshold=float(fuzzy_threshold),
                             max_fuzzy_matches=int(max_fuzzy_matches),
                             pred_db=pred_db,
                             custom_db=latest_custom_db,
+                            check_predatory_registry=check_predatory_registry,
+                            include_norwegian_registry_link=include_norwegian_registry_link,
+                            check_doaj=check_doaj,
+                            check_custom_watchlist=check_custom_watchlist,
                         )
-                        progress.progress(75)
+                        progress.progress(85)
                         status_box.write("3/3 Preparing results")
                         progress.progress(100)
                         status_box.update(
@@ -1398,7 +1709,9 @@ def main() -> None:
                             expanded=False,
                         )
                     st.session_state.analysis_rows = rows
-                    st.session_state.analysis_pred_db_loaded = pred_db_loaded
+                    st.session_state.analysis_pred_db_loaded = (
+                        pred_db_loaded if check_predatory_registry else False
+                    )
                     st.session_state.analysis_ran = True
                     if rows:
                         st.session_state.analysis_notice = ""
@@ -1410,7 +1723,9 @@ def main() -> None:
                         )
                 except Exception as exc:
                     st.session_state.analysis_rows = []
-                    st.session_state.analysis_pred_db_loaded = pred_db is not None
+                    st.session_state.analysis_pred_db_loaded = (
+                        pred_db is not None if check_predatory_registry else False
+                    )
                     st.session_state.analysis_ran = True
                     st.session_state.analysis_error = str(exc)
                     st.session_state.analysis_notice = ""
@@ -1419,7 +1734,7 @@ def main() -> None:
 
     with right:
         st.markdown('<div class="panel">', unsafe_allow_html=True)
-        st.subheader("3. Review results")
+        st.subheader("4. Review results")
         st.caption("Start with items that need attention, then inspect details.")
         st.markdown(
             """
@@ -1443,114 +1758,100 @@ def main() -> None:
             if not rows:
                 st.warning(st.session_state.analysis_notice or "No results available.")
             else:
-                if not st.session_state.analysis_pred_db_loaded:
+                analysis_settings = st.session_state.analysis_settings
+                active_checks = _active_check_labels(analysis_settings)
+                if analysis_settings.get("predatory_registry") and not st.session_state.analysis_pred_db_loaded:
                     st.warning(
                         "Registry files were not found. Only reference completeness was checked."
+                    )
+                if active_checks:
+                    st.caption("Active checks: " + ", ".join(active_checks))
+                else:
+                    st.info(
+                        "No external checks enabled. Showing only which reference details are missing."
                     )
 
                 df = pd.DataFrame(rows)
                 total = len(df)
                 matches = int((df["Registry warning"] == "Match").sum())
                 custom_matches = int((df["Custom watchlist warning"] == "Match").sum())
-                no_match = total - matches
-                needs_review = int(df["Recommended next step"].isin(["Check immediately", "Check manually"]).sum())
-                score_series = df["Match confidence"].fillna("").astype(str).str.rstrip("%")
-                avg_score = score_series.replace("", "0").astype(float).mean()
-
-                stats = st.columns(6)
-                stats[0].markdown(
-                    f"""
-                    <div class="stat-card">
-                      <div class="stat-label">References</div>
-                      <div class="stat-value">{total}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                stats[1].markdown(
-                    f"""
-                    <div class="stat-card">
-                      <div class="stat-label">Registry-flagged</div>
-                      <div class="stat-value">{matches}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                stats[2].markdown(
-                    f"""
-                    <div class="stat-card">
-                      <div class="stat-label">Watchlist-flagged</div>
-                      <div class="stat-value">{custom_matches}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                stats[3].markdown(
-                    f"""
-                    <div class="stat-card">
-                      <div class="stat-label">Not found</div>
-                      <div class="stat-value">{no_match}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                stats[4].markdown(
-                    f"""
-                    <div class="stat-card">
-                      <div class="stat-label">Needs review</div>
-                      <div class="stat-value">{needs_review}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-                stats[5].markdown(
-                    f"""
-                    <div class="stat-card">
-                      <div class="stat-label">Avg. confidence</div>
-                      <div class="stat-value">{avg_score:.0f}%</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+                no_match = int((df["Registry warning"] == "No match").sum())
+                doaj_registered = int((df["DOAJ status"] == "Registered").sum())
+                missing_details = int((df["Missing fields"] != "None").sum())
+                needs_review = int(
+                    df["Recommended next step"]
+                    .isin(["Check immediately", "Check manually", "Add missing details"])
+                    .sum()
                 )
 
-                st.caption(
-                    "`Not found` means no matching entry was found in the loaded registry data."
-                )
+                stat_items = [("References", total), ("Missing details", missing_details)]
+                if analysis_settings.get("predatory_registry"):
+                    stat_items.append(("Registry-flagged", matches))
+                    stat_items.append(("Not found in registry", no_match))
+                if analysis_settings.get("custom_watchlist"):
+                    stat_items.append(("Watchlist-flagged", custom_matches))
+                if analysis_settings.get("doaj"):
+                    stat_items.append(("DOAJ registered", doaj_registered))
+                stat_items.append(("Needs review", needs_review))
 
-                view_name = _pick_view()
+                stats = st.columns(len(stat_items))
+                for idx, (label, value) in enumerate(stat_items):
+                    stats[idx].markdown(
+                        f"""
+                        <div class="stat-card">
+                          <div class="stat-label">{label}</div>
+                          <div class="stat-value">{value}</div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+
+                if analysis_settings.get("predatory_registry"):
+                    st.caption(
+                        "`Not found in registry` means no matching entry was found in the loaded predatory registry data."
+                    )
+                if not _has_external_checks(analysis_settings):
+                    st.caption(
+                        "Completeness-only mode is active. The table below surfaces missing citation details such as journal, year, or DOI/URL."
+                    )
+
+                view_name = _pick_view(analysis_settings)
                 filtered_df = _sort_for_review(_filter_rows(df, view_name).reset_index(drop=True))
                 st.caption(f"Showing {len(filtered_df)} of {len(df)} references in this view.")
                 if filtered_df.empty:
                     st.info("No references match this filter. Try another quick view.")
                     filtered_df = _sort_for_review(df.reset_index(drop=True))
 
-                display_columns = [
-                    "Reference",
-                    "Recommended next step",
-                    "Registry warning",
-                    "Custom watchlist warning",
-                    "Risk level",
-                    "Registry record",
-                    "Matched text",
-                    "Expanded journal title",
-                    "Abbreviation candidates",
-                    "Source URL",
-                    "Norwegian registry search",
-                ]
+                display_columns = _result_columns(analysis_settings)
                 display_df = filtered_df[display_columns].copy()
-                display_df["Registry warning"] = display_df["Registry warning"].replace(
-                    {"Match": "Flagged", "No match": "Not found in loaded registry"}
-                )
-                display_df["Custom watchlist warning"] = display_df["Custom watchlist warning"].replace(
-                    {"Match": "Flagged", "No match": "Not found in custom watchlist"}
-                )
+                if "Registry warning" in display_df.columns:
+                    display_df["Registry warning"] = display_df["Registry warning"].replace(
+                        {
+                            "Match": "Flagged",
+                            "No match": "Not found in loaded registry",
+                            "Not run": "Not run",
+                        }
+                    )
+                if "Custom watchlist warning" in display_df.columns:
+                    display_df["Custom watchlist warning"] = display_df[
+                        "Custom watchlist warning"
+                    ].replace(
+                        {
+                            "Match": "Flagged",
+                            "No match": "Not found in custom watchlist",
+                            "Not run": "Not run",
+                        }
+                    )
 
                 column_config = {
+                    "Registry warning": st.column_config.TextColumn("Registry flag"),
+                    "DOAJ link": st.column_config.LinkColumn("DOAJ link"),
+                    "DOAJ status": st.column_config.TextColumn("DOAJ"),
+                    "Missing fields": st.column_config.TextColumn("Missing details"),
                     "Norwegian registry search": st.column_config.LinkColumn(
                         "Search Norwegian register"
                     ),
                     "Source URL": st.column_config.LinkColumn("Source URL"),
-                    "Registry warning": st.column_config.TextColumn("Registry flag"),
                     "Custom watchlist warning": st.column_config.TextColumn("Watchlist flag"),
                     "Recommended next step": st.column_config.TextColumn(
                         "What to do next",
@@ -1560,7 +1861,9 @@ def main() -> None:
                 styled = display_df.style
                 style_rules = [
                     ("Registry warning", _style_match_status),
+                    ("DOAJ status", _style_doaj_status),
                     ("Custom watchlist warning", _style_custom_status),
+                    ("Missing fields", _style_missing_fields),
                     ("Risk level", _style_risk_level),
                     ("Norwegian level", _style_norwegian_level),
                     ("Reference check", _style_missing_fields),
@@ -1589,28 +1892,57 @@ def main() -> None:
                     selected_idx = detail_options.index(selected_option)
                     selected_row = filtered_df.iloc[selected_idx]
                     st.markdown('<div class="detail-card">', unsafe_allow_html=True)
-                    top = st.columns(4)
+                    top = st.columns(3)
                     top[0].markdown(f"**Next step**\n\n{selected_row['Recommended next step']}")
-                    top[1].markdown(f"**Risk level**\n\n{selected_row['Risk level'] or 'Unknown'}")
-                    top[2].markdown(f"**Norwegian level**\n\n{selected_row['Norwegian level'] or 'Unknown'}")
-                    top[3].markdown(f"**Match confidence**\n\n{selected_row['Match confidence'] or 'N/A'}")
+                    top[1].markdown(f"**Missing fields**\n\n{selected_row['Missing fields']}")
+                    top[2].markdown(f"**Reference check**\n\n{selected_row['Reference check']}")
                     st.markdown("**Reference text**")
                     st.code(selected_row["Reference"], language="text")
-                    details_cols = st.columns(2)
-                    details_cols[0].markdown("**Registry record**")
-                    details_cols[0].write(selected_row["Registry record"] or "Not found in loaded registry")
-                    details_cols[1].markdown("**Reference check**")
-                    details_cols[1].write(selected_row["Reference check"])
-                    st.markdown("**Abbreviation expansion candidates**")
-                    st.write(selected_row["Abbreviation candidates"] or "No abbreviation expansion candidates")
-                    if selected_row.get("Expanded journal title"):
-                        st.markdown("**Expanded journal title used for matching**")
-                        st.write(selected_row["Expanded journal title"])
-                    st.markdown("**Registry note**")
-                    st.write(selected_row["Registry note"] or "No additional note")
+                    if analysis_settings.get("predatory_registry"):
+                        registry_cols = st.columns(3)
+                        registry_cols[0].markdown("**Registry flag**")
+                        registry_cols[0].write(selected_row["Registry warning"])
+                        registry_cols[1].markdown("**Risk level**")
+                        registry_cols[1].write(selected_row["Risk level"] or "Unknown")
+                        registry_cols[2].markdown("**Match confidence**")
+                        registry_cols[2].write(selected_row["Match confidence"] or "N/A")
+                        st.markdown("**Registry record**")
+                        st.write(selected_row["Registry record"] or "Not found in loaded registry")
+                        st.markdown("**Abbreviation expansion candidates**")
+                        st.write(
+                            selected_row["Abbreviation candidates"]
+                            or "No abbreviation expansion candidates"
+                        )
+                        if selected_row.get("Expanded journal title"):
+                            st.markdown("**Expanded journal title used for matching**")
+                            st.write(selected_row["Expanded journal title"])
+                        st.markdown("**Registry note**")
+                        st.write(selected_row["Registry note"] or "No additional note")
+                    if analysis_settings.get("doaj"):
+                        doaj_cols = st.columns(2)
+                        doaj_cols[0].markdown("**DOAJ status**")
+                        doaj_cols[0].write(selected_row["DOAJ status"])
+                        doaj_cols[1].markdown("**DOAJ matched title**")
+                        doaj_cols[1].write(
+                            selected_row["DOAJ matched title"] or "No DOAJ match title"
+                        )
+                        if selected_row.get("DOAJ link"):
+                            st.markdown("**DOAJ link**")
+                            st.write(selected_row["DOAJ link"])
+                    if analysis_settings.get("custom_watchlist"):
+                        st.markdown("**Custom watchlist flag**")
+                        st.write(selected_row["Custom watchlist warning"])
+                    if analysis_settings.get("norwegian_registry") and selected_row.get(
+                        "Norwegian registry search"
+                    ):
+                        st.markdown("**Norwegian Kanalregister link**")
+                        st.write(selected_row["Norwegian registry search"])
                     st.markdown('</div>', unsafe_allow_html=True)
 
-                full_export_df = _sort_for_review(df.reset_index(drop=True))
+                export_columns = [
+                    column for column in _export_columns(analysis_settings) if column in df.columns
+                ]
+                full_export_df = _sort_for_review(df.reset_index(drop=True))[export_columns]
                 csv_data = full_export_df.to_csv(index=False).encode("utf-8")
                 excel_data = _build_excel_bytes(full_export_df)
                 download_cols = st.columns(2)
