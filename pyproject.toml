@@ -24,4 +24,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-addopts = "-ra"
+addopts = "-ra -p no:cacheprovider --ignore-glob=pytest-cache-files-*"
+testpaths = ["tests"]
+norecursedirs = [".venv", ".tmp", ".pytest_tmp", "pytest-cache-files-*"]
+tmp_path_retention_policy = "none"

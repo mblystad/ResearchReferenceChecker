@@ -1,6 +1,8 @@
 from reference_checker.citation_extractor import CitationExtractor
 from reference_checker.parsers import DocumentParser
 from reference_checker.reference_parser import ReferenceListParser
+from reference_checker.validation import validate_reference_completeness
+from reference_checker.models import ReferenceEntry
 
 
 def test_document_parser_splits_references():
@@ -9,6 +11,16 @@ def test_document_parser_splits_references():
     body, refs = parser.split_sections(text)
     assert "Introduction" in body
     assert "References" not in body
+    assert "Doe" in refs
+
+
+def test_document_parser_accepts_reference_list_heading():
+    text = "Introduction text.\nReference List\n[1] Doe, J. Study. 2020."
+    parser = DocumentParser()
+    body, refs = parser.split_sections(text)
+
+    assert "Introduction" in body
+    assert "Reference List" not in body
     assert "Doe" in refs
 
 
@@ -68,3 +80,19 @@ def test_reference_parser_handles_int_j_cardiol_style_with_resource_tags():
 
     assert entry.year == "2015"
     assert entry.journal == "Int. J. Cardiol"
+
+
+def test_book_reference_does_not_require_locator():
+    entry = ReferenceEntry(
+        raw_text="Doe, J. Testing handbook. Testing Press. 2019.",
+        authors=["Doe, J."],
+        title="Testing handbook",
+        publisher="Testing Press",
+        year="2019",
+        entry_type="book",
+    )
+
+    issues = validate_reference_completeness(entry)
+    codes = {issue.code for issue in issues}
+
+    assert "missing-locator" not in codes

@@ -13,7 +13,13 @@ def validate_reference_completeness(
     reference: ReferenceEntry, style: str = "apa"
 ) -> List[ValidationIssue]:
     issues: List[ValidationIssue] = []
-    if not reference.authors:
+    ref_type = (reference.entry_type or "unknown").lower()
+    require_authors = ref_type not in {"website", "dataset"}
+    require_title = True
+    require_year = ref_type != "website"
+    require_locator = ref_type in {"journal", "conference", "preprint", "dataset", "unknown"}
+
+    if require_authors and not reference.authors:
         issues.append(
             ValidationIssue(
                 code="missing-authors",
@@ -21,7 +27,7 @@ def validate_reference_completeness(
                 context=reference.raw_text,
             )
         )
-    if not reference.title:
+    if require_title and not reference.title:
         issues.append(
             ValidationIssue(
                 code="missing-title",
@@ -29,7 +35,7 @@ def validate_reference_completeness(
                 context=reference.raw_text,
             )
         )
-    if not reference.year:
+    if require_year and not reference.year:
         issues.append(
             ValidationIssue(
                 code="missing-year",
@@ -37,7 +43,7 @@ def validate_reference_completeness(
                 context=reference.raw_text,
             )
         )
-    if not (reference.doi or reference.url):
+    if require_locator and not (reference.doi or reference.url):
         issues.append(
             ValidationIssue(
                 code="missing-locator",

@@ -12,7 +12,10 @@ from xml.etree import ElementTree
 class DocumentParser:
     """Splits manuscript text into body and reference sections."""
 
-    REFERENCE_HEADINGS = re.compile(r"^(references|bibliography)\s*$", re.IGNORECASE | re.MULTILINE)
+    REFERENCE_HEADINGS = re.compile(
+        r"^(references|reference list|bibliography|works cited|literature cited)\s*$",
+        re.IGNORECASE | re.MULTILINE,
+    )
 
     def split_sections(self, text: str) -> Tuple[str, str]:
         """Return (body_text, references_text) based on heading detection."""

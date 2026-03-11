@@ -26,7 +26,7 @@ Write-Host "Building abbreviation datasets and enriched registry..."
 
 if (-not $SkipTests) {
     Write-Host "Running tests..."
-    & $py -m pytest -q
+    & $py -m pytest -q tests --ignore-glob=pytest-cache-files-*
 }
 
 Write-Host ""

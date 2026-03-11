@@ -18,9 +18,9 @@ This installs dependencies, builds data, and runs tests.
 
 1. Paste 5 to 10 references (one per line).
 2. Include at least one abbreviated journal name.
-3. Click **Analyze references**.
+3. Click **Review references**.
 4. Explain columns:
-- `Recommended next step`
+- `What to do next`
 - `Registry warning`
 - `Risk level`
 - `Expanded journal title`

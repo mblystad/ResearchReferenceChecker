@@ -86,6 +86,57 @@ def test_build_rows_adds_doaj_fields_and_deduplicates_lookups():
     assert calls.count("Journal of Testing") == 1
     assert rows[0]["DOAJ status"] == "Registered"
     assert rows[0]["DOAJ matched title"] == "Journal of Testing"
+    assert rows[0]["DOAJ queried title"] == "Journal of Testing"
+    assert rows[0]["DOAJ lookup method"] == "Parsed journal title"
     assert rows[0]["DOAJ link"] == "https://doaj.org/api/v4/journals/journal-123"
     assert rows[1]["DOAJ status"] == "Registered"
     assert rows[2]["DOAJ status"] == "Registered"
+
+
+def test_build_rows_uses_abbreviation_expansion_for_doaj_lookup():
+    pytest.importorskip("pandas")
+    import app as streamlit_app
+
+    calls = []
+
+    class FakePredatoryDb:
+        def abbreviation_candidates(self, journal, limit=20):
+            if journal == "J. Test":
+                return ["Journal of Testing"]
+            return []
+
+        def match_reference(self, *_args, **_kwargs):
+            return []
+
+    class FakeDoajClient:
+        def lookup_journal(self, journal_title: str) -> DoajJournalMatch:
+            calls.append(journal_title)
+            if journal_title == "Journal of Testing":
+                return DoajJournalMatch(
+                    query=journal_title,
+                    found=True,
+                    matched_title="Journal of Testing",
+                    record_id="journal-123",
+                    record_url="https://doaj.org/api/v4/journals/journal-123",
+                )
+            return DoajJournalMatch(query=journal_title, found=False)
+
+    reference_text = (
+        "Doe, J. (2020). First article. J. Test., 1, 1-10. https://doi.org/10.1000/one"
+    )
+
+    rows, pred_db_loaded = streamlit_app._build_rows(
+        reference_text,
+        fuzzy_threshold=0.88,
+        max_fuzzy_matches=3,
+        pred_db=FakePredatoryDb(),
+        check_doaj=True,
+        doaj_client=FakeDoajClient(),
+    )
+
+    assert pred_db_loaded is True
+    assert calls == ["J. Test", "Journal of Testing"]
+    assert rows[0]["DOAJ status"] == "Registered"
+    assert rows[0]["DOAJ queried title"] == "Journal of Testing"
+    assert rows[0]["DOAJ lookup method"] == "Abbreviation expansion"
+    assert rows[0]["DOAJ lookup candidates"] == "J. Test; Journal of Testing"

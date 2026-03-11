@@ -20,4 +20,3 @@ def test_user_report_for_docx_includes_counts_and_issues(sample_docx_path):
     assert "Reference entries: 4" in report
     assert "Matched pairs: 3" in report
     assert "uncited-reference" in report
-    assert "missing-locator" in report

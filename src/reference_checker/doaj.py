@@ -23,6 +23,8 @@ class DoajJournalMatch:
     record_id: str = ""
     record_url: str = ""
     error: str = ""
+    lookup_method: str = "Parsed journal title"
+    lookup_candidates: tuple[str, ...] = ()
 
 
 class DoajClient:

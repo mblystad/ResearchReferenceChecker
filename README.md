@@ -1,32 +1,87 @@
 # Research Reference Checker
 
-Research Reference Checker helps you review references for potential warning signals.
+Research Reference Checker helps academic users review references for missing details and possible warning signals.
 
-It can:
-- check references against local predatory journal/publisher lists
-- optionally check whether a parsed journal is registered in DOAJ
-- optionally add a Norwegian Kanalregister search link for parsed journals
-- optionally match against a local custom watchlist of journals/publishers
-- handle abbreviated journal names (for example `J. Clin. Oncol.` style inputs)
-- show a risk-oriented summary in a simple web UI
-- export results to CSV/Excel for sharing
+## For Users
 
-## For Users (No Coding Required)
+If you just want to use the app, you only need the Windows release zip.
+
+### Download and Open
 
 1. Go to **GitHub Releases** for this repository.
 2. Download the latest `ReferenceChecker-windows-x64.zip`.
 3. Unzip it.
 4. Double-click `ReferenceChecker.exe`.
+5. The app opens in your browser on your own computer.
 
-Notes:
+### Use the App
+
+1. Paste references, one per line.
+2. Click **Review references**.
+3. Start with the **What to do next** column.
+4. Open **Inspect reference** if you want more detail.
+5. Export CSV or Excel if needed.
+
+### Add Screenshot Here
+
+Add your illustration or screenshot in this section so colleagues can see the app before downloading it.
+
+You can also point users to [USER_QUICKSTART.md](./USER_QUICKSTART.md) for a shorter handout-style guide.
+
+### Important Notes for Users
+
 - No Python installation is needed.
-- If Windows SmartScreen appears, choose **More info** -> **Run anyway** (if you trust the source).
+- If Windows SmartScreen appears, choose **More info** -> **Run anyway** if you trust the source.
+- `No registry match` does not automatically mean a source is safe.
+- `Not listed in DOAJ` does not automatically mean a journal is problematic.
+- The app supports review. It does not replace subject expertise or institutional policy.
 - Custom watchlist entries are saved in a local `data/` folder next to the EXE.
 
-## For Developers (Run from Source)
+## What the App Does
 
-1. Open PowerShell in this folder.
-2. Run:
+The app can:
+- review references against loaded journal and publisher warning lists
+- optionally check whether a parsed journal is listed in DOAJ
+- optionally add a Norwegian Kanalregister search link for parsed journals
+- optionally match against a local custom watchlist of journals and publishers
+- expand abbreviated journal names such as `J. Clin. Oncol.` before warning-list matching and DOAJ lookup
+- show a plain-language summary in a web UI
+- export results to CSV or Excel
+
+## How to Read the Results
+
+- `Check immediately`: strong warning signal that should be reviewed first
+- `Check manually`: possible concern that needs human review
+- `Add missing details`: the reference looks incomplete
+- `Looks OK`: no urgent issue was found in this run
+
+Important:
+- A match is a warning signal, not a verdict.
+- `No registry match` means no match was found in the loaded list. It is not a clearance result.
+- `Not listed in DOAJ` means the journal was not found in DOAJ during that lookup. It is not a verdict by itself.
+- The Norwegian register option adds a search link only. It is a convenience feature, not a quality check by itself.
+
+## Data Sources
+
+The app can use these sources during a run:
+- DOAJ API for journal listing checks
+- warning-list data collected from `predatoryjournals.org`
+- Norwegian Kanalregister search links for parsed journal titles
+- your own saved custom watchlist in `data/custom_watchlist.csv`
+
+Warning-list source details shown in the app:
+- source website: `https://www.predatoryjournals.org/`
+- update label used in the UI: `February 2, 2026`
+
+## Limits to Know
+
+- The web app expects one reference per line.
+- The CLI manuscript parser expects a heading such as `References`, `Reference List`, `Bibliography`, `Works Cited`, or `Literature Cited`.
+- If you disable all actual review checks, the app switches to completeness-only mode and highlights missing details such as authors, journal or venue, year, and DOI or URL.
+
+## GitHub Project Info
+
+### Run from Source
 
 ```powershell
 .\scripts\prepare_demo.ps1
@@ -40,11 +95,9 @@ What this does:
 - runs tests
 - opens the app
 
-For a presenter-only checklist, see [DEMO_RUNBOOK.md](./DEMO_RUNBOOK.md).
+For a presenter checklist, see [DEMO_RUNBOOK.md](./DEMO_RUNBOOK.md).
 
-## Build a Release Package (Maintainers)
-
-Use one of these commands:
+### Build a Release Package
 
 ```powershell
 .\build.ps1
@@ -58,101 +111,28 @@ build.bat
 
 Output:
 - `dist/ReferenceChecker.exe`
-- `dist/ReferenceChecker-windows-x64.zip` (the file to upload to GitHub Releases)
+- `dist/ReferenceChecker-windows-x64.zip`
 
-## Using the App (Step by Step)
+### Troubleshooting
 
-1. Paste references into the text box, one reference per line.
-2. Choose which checks to run.
-3. Click **Run check**.
-4. Review the **Recommended next step** column first.
-5. Open a row in **Inspect reference** to see:
-- why it was flagged
-- match method
-- abbreviation expansion candidates (if relevant)
-6. Export results with **Download CSV** or **Download Excel (.xlsx)**.
-
-## Data Sources and Optional Checks
-
-The app can use these sources during a run:
-- DOAJ API for journal registration checks
-- predatory registry data collected from `predatoryjournals.org`
-- Norwegian Kanalregister search links for parsed journal titles
-- your own saved custom watchlist in `data/custom_watchlist.csv`
-
-Predatory registry source details shown in the app:
-- source website: `https://www.predatoryjournals.org/`
-- update label used in the UI: `February 2, 2026`
-
-Important:
-- all of these checks are optional in the UI
-- if you disable every optional check, the app switches to a completeness-only mode
-- completeness-only mode highlights what is missing from each reference, such as authors, journal/venue, year, or DOI/URL
-
-## What the Results Mean
-
-- `Check immediately`: strong warning signal (high risk or strong registry/watchlist hit).
-- `Check manually`: possible issue, should be reviewed by a human.
-- `Add missing details`: reference is incomplete (metadata fields missing).
-- `Looks OK`: no urgent warning found in this run.
-
-Important:
-- a match is a warning signal, not a final legal/academic verdict
-- always verify with source links and your institutional policy
-
-## Abbreviation Matching
-
-The app supports abbreviation expansion before matching.
-
-Example:
-- input journal in reference: `Int. J. Cardiol.`
-- system expands abbreviation candidates
-- expanded title is checked against registry records
-
-If an abbreviation is ambiguous, candidate titles are shown so the reviewer can inspect what was considered.
-
-## Files the Project Uses
-
-Main registry files:
-- `predatory_db_v7_with_norwegian_levels.csv`
-- `pred_pub_list.csv`
-- `pred_jour_list.csv`
-
-Generated abbreviation and enriched data:
-- `data/abbr_to_full.json`
-- `data/abbr_to_full.sqlite`
-- `data/abbr_build_report.json`
-- `data/predatory_db_v7_with_norwegian_levels_enriched.csv`
-
-These are generated by:
-
-```powershell
-python scripts/build_journal_abbreviation_db.py
-```
-
-## Troubleshooting
-
-### App does not start
+#### App does not start
 - Run: `.\.venv\Scripts\python.exe run_app.py`
-- If there is an error, check `ReferenceChecker.log` (created next to the app launcher).
+- If there is an error, check `ReferenceChecker.log` next to the app launcher.
 
-### "Registry files not found"
-- Make sure the CSV files listed above are in the project root or `data/`.
+#### Warning-list files not found
+- Make sure the CSV files are in the project root or `data/`.
 
-### No references detected
-- Paste one reference per line.
-- For manuscript parsing via CLI, make sure a `References` or `Bibliography` heading exists.
+#### No references detected
+- Paste one reference per line in the web app.
+- For CLI parsing, make sure the manuscript uses a heading such as `References`, `Reference List`, `Bibliography`, `Works Cited`, or `Literature Cited`.
 
-### PowerShell script blocked
-- Run:
+#### PowerShell script blocked
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\prepare_demo.ps1
 ```
 
-## CLI (Advanced)
-
-If you want full manuscript parsing from terminal:
+### CLI (Advanced)
 
 ```powershell
 .\.venv\Scripts\python.exe -m reference_checker.cli your_manuscript.docx --json-output results.json
@@ -164,20 +144,16 @@ Optional outputs:
 - `--ris-output`
 - `--endnote-output`
 
-## Project Structure (Key Files)
+### Project Structure
 
 - `app.py`: Streamlit app UI
 - `run_app.py`: local launcher for Streamlit app
-- `scripts/build_journal_abbreviation_db.py`: abbreviation/enrichment builder
-- `scripts/prepare_demo.ps1`: one-command demo prep
-- `scripts/run_demo.ps1`: launch app after prep
-- `src/reference_checker/predatory_db.py`: matching engine
+- `scripts/build_journal_abbreviation_db.py`: abbreviation and enrichment builder
+- `src/reference_checker/predatory_db.py`: warning-list matching engine
 - `src/reference_checker/journal_abbreviations.py`: abbreviation dataset loader
 
-## Developer Validation
-
-Run tests:
+### Developer Validation
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q
+.\.venv\Scripts\python.exe -m pytest -q tests --ignore-glob=pytest-cache-files-*
 ```
