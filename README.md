@@ -97,21 +97,21 @@ What this does:
 
 For a presenter checklist, see [DEMO_RUNBOOK.md](./DEMO_RUNBOOK.md).
 
-### Build a Release Package
+### Create a Release Zip
 
 ```powershell
-.\build.ps1
-```
-
-or
-
-```bat
-build.bat
+python .\zip.py
 ```
 
 Output:
-- `dist/ReferenceChecker.exe`
+- `dist/ReferenceChecker-windows-x64/`
 - `dist/ReferenceChecker-windows-x64.zip`
+
+The release folder and zip include:
+- `ReferenceChecker.exe`
+- the packaged runtime files needed to launch the app without Python installed
+- `data/` with registry CSV files and the abbreviation database
+- `README.txt` and `USER_QUICKSTART.md`
 
 ### Troubleshooting
 

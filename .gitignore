@@ -8,6 +8,7 @@ __pycache__/
 .venv/
 .pytest_cache/
 .pytest_tmp/
+.pytest_tmp_docx/
 .tmp/
 pytest-cache-files-*/
 *.egg-info/
