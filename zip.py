@@ -32,6 +32,14 @@ CONDA_RUNTIME_DLLS = (
     "tcl86t.dll",
     "tk86t.dll",
 )
+PYINSTALLER_HIDDEN_IMPORTS = (
+    # PyInstaller on Python 3.14 can miss some stdlib modules used at runtime.
+    "_collections_abc",
+    "html",
+    "html.entities",
+    "html.parser",
+    "_markupbase",
+)
 
 
 def main() -> None:
@@ -86,7 +94,7 @@ def _load_pyinstaller():
 
 
 def _pyinstaller_args() -> list[str]:
-    return [
+    args = [
         "--noconfirm",
         "--clean",
         "--windowed",
@@ -101,24 +109,31 @@ def _pyinstaller_args() -> list[str]:
         str(PYI_SPEC),
         "--collect-all",
         "streamlit",
-        "--add-data",
-        _add_data("app.py", "."),
-        "--add-data",
-        _add_data("src", "src"),
-        "--add-data",
-        _add_data("reflogo.png", "."),
-        "--add-data",
-        _add_data(".streamlit", ".streamlit"),
-        "--add-data",
-        _add_data("data", "data"),
-        "--add-data",
-        _add_data("predatory_db_v7_with_norwegian_levels.csv", "data"),
-        "--add-data",
-        _add_data("pred_pub_list.csv", "data"),
-        "--add-data",
-        _add_data("pred_jour_list.csv", "data"),
-        "run_app.py",
     ]
+    for module_name in PYINSTALLER_HIDDEN_IMPORTS:
+        args.extend(["--hidden-import", module_name])
+    args.extend(
+        [
+            "--add-data",
+            _add_data("app.py", "."),
+            "--add-data",
+            _add_data("src", "src"),
+            "--add-data",
+            _add_data("reflogo.png", "."),
+            "--add-data",
+            _add_data(".streamlit", ".streamlit"),
+            "--add-data",
+            _add_data("data", "data"),
+            "--add-data",
+            _add_data("predatory_db_v7_with_norwegian_levels.csv", "data"),
+            "--add-data",
+            _add_data("pred_pub_list.csv", "data"),
+            "--add-data",
+            _add_data("pred_jour_list.csv", "data"),
+            "run_app.py",
+        ]
+    )
+    return args
 
 
 def _add_data(source: str, destination: str) -> str:
@@ -163,9 +178,20 @@ def _make_zip(release_dir: Path, zip_path: Path) -> None:
 
 def _remove_path(path: Path) -> None:
     if path.is_dir():
-        shutil.rmtree(path, ignore_errors=True)
+        shutil.rmtree(path, onexc=_handle_remove_error)
     elif path.exists():
-        path.unlink()
+        try:
+            path.unlink()
+        except PermissionError:
+            os.chmod(path, 0o700)
+            path.unlink()
+    if path.exists():
+        raise SystemExit(f"Unable to remove existing path before build: {path}")
+
+
+def _handle_remove_error(function, path: str, excinfo) -> None:
+    os.chmod(path, 0o700)
+    function(path)
 
 
 if __name__ == "__main__":

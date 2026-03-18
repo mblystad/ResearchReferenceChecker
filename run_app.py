@@ -9,6 +9,28 @@ from pathlib import Path
 from streamlit.web import cli as stcli
 
 
+def _configure_streamlit_runtime(selected_port: int) -> list[str]:
+    # Frozen PyInstaller apps do not live under site-packages, which makes
+    # Streamlit mis-detect them as development installs unless we override it.
+    os.environ["STREAMLIT_GLOBAL_DEVELOPMENT_MODE"] = "false"
+    os.environ["STREAMLIT_SERVER_ADDRESS"] = "127.0.0.1"
+    os.environ["STREAMLIT_SERVER_PORT"] = str(selected_port)
+    os.environ["STREAMLIT_SERVER_HEADLESS"] = "false"
+    os.environ["STREAMLIT_BROWSER_GATHER_USAGE_STATS"] = "false"
+
+    app_path = Path(__file__).resolve().parent / "app.py"
+    return [
+        "streamlit",
+        "run",
+        str(app_path),
+        "--global.developmentMode=false",
+        "--server.address=127.0.0.1",
+        f"--server.port={selected_port}",
+        "--server.headless=false",
+        "--browser.gatherUsageStats=false",
+    ]
+
+
 def _log_error(message: str) -> Path:
     if getattr(sys, "frozen", False):
         base = Path(sys.executable).resolve().parent
@@ -21,6 +43,19 @@ def _log_error(message: str) -> Path:
 
 def _show_error(log_path: Path) -> None:
     try:
+        if sys.platform == "win32":
+            import ctypes
+
+            ctypes.windll.user32.MessageBoxW(
+                0,
+                "The app couldn't start. A log file was written to:\n"
+                f"{log_path}\n\n"
+                "Please share this file so we can fix the issue.",
+                "Reference Checker failed to start",
+                0x10,
+            )
+            return
+
         import tkinter as tk
         from tkinter import messagebox
 
@@ -38,7 +73,6 @@ def _show_error(log_path: Path) -> None:
 
 
 def main() -> None:
-    app_path = Path(__file__).resolve().parent / "app.py"
     preferred_port = 3000
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         try:
@@ -46,19 +80,7 @@ def main() -> None:
         except OSError:
             sock.bind(("127.0.0.1", 0))
         selected_port = sock.getsockname()[1]
-    os.environ.setdefault("STREAMLIT_SERVER_ADDRESS", "127.0.0.1")
-    os.environ.setdefault("STREAMLIT_SERVER_PORT", str(selected_port))
-    os.environ.setdefault("STREAMLIT_SERVER_HEADLESS", "false")
-    os.environ.setdefault("STREAMLIT_BROWSER_GATHER_USAGE_STATS", "false")
-    sys.argv = [
-        "streamlit",
-        "run",
-        str(app_path),
-        "--server.address=127.0.0.1",
-        f"--server.port={selected_port}",
-        "--server.headless=false",
-        "--browser.gatherUsageStats=false",
-    ]
+    sys.argv = _configure_streamlit_runtime(selected_port)
     try:
         raise SystemExit(stcli.main())
     except SystemExit:

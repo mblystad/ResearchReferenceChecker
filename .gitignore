@@ -16,6 +16,8 @@ pytest-cache-files-*/
 # Build outputs
 build/
 dist/
+*.zip
+*.spec
 
 # Local logs and runtime output
 *.log
