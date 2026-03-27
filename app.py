@@ -4,7 +4,6 @@ import base64
 import csv
 import re
 import sys
-from html import escape
 from io import BytesIO, StringIO
 from pathlib import Path
 from urllib.parse import quote_plus
@@ -171,14 +170,10 @@ THEME_CSS = """
 <style>
 :root {
   --paper: #0d1218;
-  --paper-deep: #151b22;
   --panel: #121a22;
   --ink: #f7fafc;
   --muted: #d5dde6;
   --accent: #cf2436;
-  --accent-soft: #45232b;
-  --success: #ddf6ea;
-  --warning: #ffe9ec;
   --border: #445361;
   --link: #8dc7ff;
   --shadow: 0 14px 30px rgba(0, 0, 0, 0.42);
@@ -209,8 +204,7 @@ li {
   color: var(--ink) !important;
 }
 
-[data-testid="stCaptionContainer"] p,
-.footer-note {
+[data-testid="stCaptionContainer"] p {
   color: var(--muted) !important;
 }
 
@@ -360,22 +354,6 @@ div[data-baseweb="tag"] span {
   animation: rise-in 380ms ease-out;
 }
 
-.chip {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  background: var(--accent-soft);
-  color: #ffecef;
-  margin-right: 8px;
-}
-
-.chip-success { background: rgba(44, 105, 74, 0.42); color: var(--success); }
-.chip-warning { background: rgba(157, 32, 46, 0.52); color: var(--warning); }
-.chip-neutral { background: rgba(80, 99, 120, 0.46); color: var(--ink); }
-
 .stat-card {
   background: #1a2530;
   border: 1px solid var(--border);
@@ -515,16 +493,6 @@ def _format_score(score: float | None) -> str:
     if score is None:
         return ""
     return f"{score:.0%}"
-
-
-def _chip(text: str, tone: str = "neutral") -> str:
-    class_map = {
-        "neutral": "chip-neutral",
-        "success": "chip-success",
-        "warning": "chip-warning",
-    }
-    css_class = class_map.get(tone, "chip-neutral")
-    return f'<span class="chip {css_class}">{escape(text)}</span>'
 
 
 def _pick_best_match(matches: list[PredatoryDbMatch]) -> PredatoryDbMatch | None:
@@ -2268,12 +2236,6 @@ def main() -> None:
             height=0,
         )
         st.session_state.scroll_to_results = False
-
-    st.markdown(
-        '<p class="footer-note">Keep your loaded lists and watchlists up to date for the most reliable review.</p>',
-        unsafe_allow_html=True,
-    )
-
 
 if __name__ == "__main__":
     main()

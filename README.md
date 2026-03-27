@@ -23,15 +23,8 @@ Important:
 
 ## For end users
 
-End users do not need Python or an IDE.
-They only need the Windows release zip produced by `zip.py`.
-
-Typical flow:
-1. Unzip the release folder.
-2. Double-click `ReferenceChecker.exe`.
-3. Paste references, one per line.
-4. Click **Review references**.
-5. Start with the **What to do next** column.
+This repository is the source version of the project.
+If you publish a packaged Windows release separately, end users do not need Python or an IDE.
 
 See [USER_QUICKSTART.md](./USER_QUICKSTART.md) for the short handout version.
 
@@ -69,36 +62,6 @@ The repo includes helper scripts for demo prep:
 `run_demo.ps1` launches the local app, or prints the launch command with `-NoLaunch`.
 
 For a presenter checklist, see [DEMO_RUNBOOK.md](./DEMO_RUNBOOK.md).
-
-## Create a Windows release zip
-
-Use this on the machine where you want to build the release:
-
-```powershell
-python .\zip.py
-```
-
-What `zip.py` does:
-- installs runtime dependencies from `requirements.txt`
-- installs build dependencies from `requirements-build.txt`
-- builds a Windows `onedir` package with PyInstaller
-- bundles the app, registry data, abbreviation database, and release docs
-- writes a ready-to-share zip for non-coders
-
-Output:
-- `dist/ReferenceChecker-windows-x64/`
-- `dist/ReferenceChecker-windows-x64.zip`
-
-The packaged release includes:
-- `ReferenceChecker.exe`
-- the runtime files needed to launch without Python installed
-- `data/` with bundled registry and abbreviation assets
-- `README.txt`
-- `USER_QUICKSTART.md`
-
-Notes:
-- `zip.py` currently targets Windows only
-- the generated zip is meant for end users; `zip.py` itself still requires Python to run
 
 ## CLI usage
 
@@ -140,7 +103,6 @@ External data/services used by the project:
 
 - `app.py`: Streamlit user interface
 - `run_app.py`: local launcher for the web app
-- `zip.py`: Windows release builder
 - `src/reference_checker/`: core parsing, matching, validation, export, and CLI logic
 - `scripts/build_journal_abbreviation_db.py`: abbreviation/enrichment data builder
 - `data/`: generated and bundled data assets

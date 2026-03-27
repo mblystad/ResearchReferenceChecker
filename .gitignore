@@ -27,4 +27,5 @@ streamlit_debug_out.log
 streamlit_debug_err.log
 
 # Local/user-generated app data
+data/abbr_build_report.json
 data/custom_watchlist.csv
