@@ -47,6 +47,14 @@ BASIS_PRIORITY = {
 }
 
 DOI_REGEX = re.compile(r"10\.\d{4,9}/\S+", re.IGNORECASE)
+ARXIV_URL_REGEX = re.compile(
+    r"arxiv\.org/(?:abs|pdf)/([a-z\-]+\/\d{7}|\d{4}\.\d{4,5}(?:v\d+)?)(?:\.pdf)?",
+    re.IGNORECASE,
+)
+ARXIV_TEXT_REGEX = re.compile(
+    r"\barxiv[:\s]+([a-z\-]+\/\d{7}|\d{4}\.\d{4,5}(?:v\d+)?)\b",
+    re.IGNORECASE,
+)
 
 CUSTOM_WATCHLIST_FILENAME = "custom_watchlist.csv"
 CUSTOM_WATCHLIST_COLUMNS = [
@@ -525,6 +533,37 @@ def _norwegian_search_url(journal: str | None) -> str:
     if not query:
         return ""
     return f"https://kanalregister.hkdir.no/sok?option=journals&input={query}&page=1"
+
+
+def _normalize_doi_for_lookup(value: str | None) -> str:
+    if not value:
+        return ""
+    cleaned = value.strip()
+    cleaned = re.sub(r"^https?://(?:dx\.)?doi\.org/", "", cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r"^doi:\s*", "", cleaned, flags=re.IGNORECASE)
+    return cleaned.strip()
+
+
+def _extract_arxiv_id(ref) -> str:
+    if ref.url:
+        match = ARXIV_URL_REGEX.search(ref.url)
+        if match:
+            return match.group(1).strip().rstrip(".,;:")
+    if ref.raw_text:
+        match = ARXIV_TEXT_REGEX.search(ref.raw_text)
+        if match:
+            return match.group(1).strip().rstrip(".,;:")
+    return ""
+
+
+def _pubpeer_lookup_url(ref) -> str:
+    doi = _normalize_doi_for_lookup(ref.doi)
+    if doi:
+        return f"https://pubpeer.com/search?q={quote_plus(f'doi:{doi}')}"
+    arxiv_id = _extract_arxiv_id(ref)
+    if arxiv_id:
+        return f"https://pubpeer.com/search?q={quote_plus(f'arxiv:{arxiv_id}')}"
+    return ""
 
 
 def _decode_uploaded_text(raw_bytes: bytes) -> str:
@@ -1128,6 +1167,7 @@ def _build_rows(
     rows: list[dict[str, str]] = []
     for ref in references:
         norwegian_search = _norwegian_search_url(ref.journal) if include_norwegian_registry_link else ""
+        pubpeer_lookup = _pubpeer_lookup_url(ref)
         doaj_status, doaj_title, doaj_link, doaj_query, doaj_lookup_method, doaj_candidates = _doaj_status_for_reference(
             ref.journal,
             doaj_lookup_cache,
@@ -1180,6 +1220,7 @@ def _build_rows(
                 "Source": best.record.source or "",
                 "Source URL": best.record.source_url or "",
                 "Norwegian registry search": norwegian_search,
+                "PubPeer lookup": pubpeer_lookup,
                 "DOAJ status": doaj_status,
                 "DOAJ matched title": doaj_title,
                 "DOAJ link": doaj_link,
@@ -1208,6 +1249,7 @@ def _build_rows(
                 "Source": "",
                 "Source URL": "",
                 "Norwegian registry search": norwegian_search,
+                "PubPeer lookup": pubpeer_lookup,
                 "DOAJ status": doaj_status,
                 "DOAJ matched title": doaj_title,
                 "DOAJ link": doaj_link,
@@ -1393,6 +1435,7 @@ def _result_columns(settings: dict[str, bool]) -> list[str]:
         "Reference",
         "Recommended next step",
         "Missing fields",
+        "PubPeer lookup",
     ]
     if settings.get("predatory_registry"):
         columns.extend(
@@ -1428,6 +1471,7 @@ def _export_columns(settings: dict[str, bool]) -> list[str]:
         "Recommended next step",
         "Missing fields",
         "Reference check",
+        "PubPeer lookup",
     ]
     if settings.get("predatory_registry"):
         base.extend(
@@ -2088,6 +2132,7 @@ def main() -> None:
                     "Norwegian registry search": st.column_config.LinkColumn(
                         "Search Norwegian register"
                     ),
+                    "PubPeer lookup": st.column_config.LinkColumn("PubPeer"),
                     "Source URL": st.column_config.LinkColumn("Source URL"),
                     "Custom watchlist warning": st.column_config.TextColumn("Watchlist flag"),
                     "Recommended next step": st.column_config.TextColumn(
@@ -2178,6 +2223,9 @@ def main() -> None:
                         if selected_row.get("DOAJ link"):
                             st.markdown("**DOAJ link**")
                             st.write(selected_row["DOAJ link"])
+                    if selected_row.get("PubPeer lookup"):
+                        st.markdown("**PubPeer lookup**")
+                        st.write(selected_row["PubPeer lookup"])
                     if analysis_settings.get("custom_watchlist"):
                         st.markdown("**Custom watchlist flag**")
                         st.write(selected_row["Custom watchlist warning"])
